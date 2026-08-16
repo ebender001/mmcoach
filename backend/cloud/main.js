@@ -1,6 +1,9 @@
-
-// Use Parse.Cloud.define to define as many cloud functions as you want.
-// For example:
-Parse.Cloud.define("hello", (request) => {
-	return "Hello world!";
-});
+/**
+ * Cloud Code entry point. This file only registers Cloud Functions --
+ * business logic lives in services/, ai/, repositories/, etc. See README.md
+ * for the full architecture overview.
+ */
+require('./functions/createCase');
+require('./functions/answerQuestion');
+require('./functions/finalizeCase');
+require('./functions/getCase');

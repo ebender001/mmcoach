@@ -1,0 +1,14 @@
+{
+  "name": "mmcoach-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Back4App Parse Cloud Code backend for the MMCoach M&M case preparation app.",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "find cloud -name '*.js' -print0 | xargs -0 -n1 node --check"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}

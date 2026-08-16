@@ -27,3 +27,9 @@ yarn-error.log*
 .env.*
 !.env.example
 backend/.parse.local
+
+# Xcode
+ios/**/xcuserdata/
+ios/**/*.xcuserstate
+ios/**/DerivedData/
+ios/**/.build/

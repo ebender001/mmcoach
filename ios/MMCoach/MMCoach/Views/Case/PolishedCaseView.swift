@@ -13,14 +13,19 @@ struct PolishedCaseView: View {
     let narrative: String
 
     @State private var showCopiedConfirmation = false
+    @State private var isPresenting = false
 
     var body: some View {
-        ScrollView {
-            Text(narrative.isEmpty ? "No narrative yet." : narrative)
-                .font(.system(.body, design: .serif))
-                .lineSpacing(6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
+        VStack(spacing: 0) {
+            presentButton
+
+            ScrollView {
+                Text(narrative.isEmpty ? "No narrative yet." : narrative)
+                    .font(.system(.body, design: .serif))
+                    .lineSpacing(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -41,13 +46,18 @@ struct PolishedCaseView: View {
                 .disabled(narrative.isEmpty)
             }
         }
+        .fullScreenCover(isPresented: $isPresenting) {
+            PresentationView(narrative: narrative)
+        }
         .overlay(alignment: .bottom) {
             if showCopiedConfirmation {
-                Text("Copied")
-                    .font(.footnote)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.thinMaterial, in: Capsule())
+                Label("Copied", systemImage: "checkmark.circle.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color.michiganBlue, in: Capsule())
+                    .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
                     .padding(.bottom, 16)
                     .transition(.opacity)
                     .task {
@@ -56,6 +66,17 @@ struct PolishedCaseView: View {
                     }
             }
         }
+    }
+
+    private var presentButton: some View {
+        Button {
+            isPresenting = true
+        } label: {
+            Label("Present", systemImage: "text.magnifyingglass")
+        }
+        .buttonStyle(.michiganProminent)
+        .disabled(narrative.isEmpty)
+        .padding()
     }
 }
 

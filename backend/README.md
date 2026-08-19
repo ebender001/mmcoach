@@ -14,8 +14,12 @@ that workflow to the trainee.** All prompt construction, AI orchestration,
 and clinical-workflow logic live here, not in the client.
 
 There is no PHI in this MVP, and no HIPAA-specific handling is implemented.
-There is no authentication yet (no Parse User); that's expected to be added
-later.
+
+Every case belongs to an authenticated `Parse.User` (email/password or Sign
+in with Apple). Cloud Functions resolve the owner from the caller's session
+(`request.user`) -- never from a client-supplied id -- and reject access to
+a case that exists but belongs to someone else the same way as one that
+doesn't exist at all. See "Authentication" below.
 
 ---
 
@@ -123,15 +127,39 @@ This project uses the classic Back4App Cloud Code layout (`cloud/`,
 
 2. **Class-Level Permissions (CLP)** -- the `MMCase` Parse class is created
    automatically the first time `mmCreateCase` runs (Cloud Code uses the
-   master key). Because there is no Parse User auth yet, lock down MMCase's
-   CLP in the dashboard so **no direct client REST/SDK access** is allowed
-   (no public find/get/create/update/delete) -- only Cloud Code, which uses
-   the master key, can read or write it.
+   master key). Lock down MMCase's CLP in the dashboard so **no direct
+   client REST/SDK access** is allowed (no public find/get/create/
+   update/delete) -- only Cloud Code, which uses the master key, can read
+   or write it. Per-object ACLs (see "Authentication" below) are
+   defense-in-depth for if this is ever loosened, not a substitute for it.
 
 3. **No client OpenAI access** -- the client never receives an OpenAI
    credential, never chooses the model, and never supplies its own system
    prompt. All of that is fixed server-side in `config/aiConfig.js` and
    `prompts/`.
+
+4. **Sign in with Apple** -- in the Back4App dashboard, go to **App
+   Settings > Server Settings > Sign In With Apple** (Parse Server's
+   built-in Apple auth adapter) and enable it with this app's **Bundle
+   ID** (`dev.benderapps.MMCoach`) as the client id. No client secret is
+   needed for sign-in-token verification -- Parse Server validates the
+   identity token's signature against Apple's public keys and checks the
+   `aud`/`iss` claims itself. This must be configured before
+   `ParseUser.apple.login(...)` (see `AppleSignInService`/
+   `ParseAuthenticationService` in the iOS app) will succeed; until it is,
+   Apple sign-in attempts fail server-side with an auth-adapter error.
+
+5. **Email verification** (optional but recommended before release) -- in
+   **App Settings > Email Settings**, enable "Verify User Emails" and
+   configure the sender. Parse Server then emails a verification link on
+   signup automatically and populates `emailVerified` on the `Parse.User`
+   -- no Cloud Code changes are needed for this.
+
+6. **Password reset email** -- also configured under **App Settings >
+   Email Settings**; Back4App provides a default password-reset email
+   template. `ParseUser.passwordReset(email:)` (called from
+   `ParseAuthenticationService`) uses this directly -- there is no custom
+   password-reset Cloud Function.
 
 ### Deploying Cloud Code
 
@@ -150,6 +178,65 @@ is for local development/testing only (Jest) and is not deployed.
 
 ---
 
+## Authentication
+
+Accounts are plain `Parse.User` records -- there is no custom Cloud Code
+for signup/login/password-reset; the iOS client calls `ParseUser` directly
+(via `ParseAuthenticationService`, see the iOS app's `Services/`). Cloud
+Code's only job is to *consume* the resulting session, never to issue one.
+
+- **Email/password** -- `username` is set to the account's email at
+  signup, so Parse's built-in uniqueness and password rules apply as-is.
+- **Sign in with Apple** -- uses Parse Server's built-in Apple auth
+  adapter via `ParseUser.apple.login(user:identityToken:)` (part of the
+  `ParseSwift` package already in this project, no extra SDK). Requires
+  the dashboard configuration in step 4 above; see "Remaining backend
+  work" below for current status.
+- **Session persistence** -- ParseSwift caches the session token/current
+  user in the Keychain automatically; every subsequent `BackendService`
+  call (including Cloud Function calls) carries that session token, which
+  is how `request.user` is populated for `requireAuthenticatedUser`
+  below. No app code manages this manually.
+
+### Ownership enforcement
+
+Every `MMCase`-touching Cloud Function (`mmCreateCase`, `mmAnswerQuestion`,
+`mmFinalizeCase`, `mmGetCase`) is defined with `{ requireUser: true }`
+*and* independently calls `utils/validation.js#requireAuthenticatedUser`,
+which reads `request.user.id` -- never a client param -- as the owner. See
+`services/caseService.js#getOwnedCase`: it fetches a case and rejects
+(`NotFoundError`) unless `caseState.ownerId` matches the caller, so a
+case id alone never grants access to someone else's case, and a
+wrong-owner case is indistinguishable from a nonexistent one.
+
+`repositories/caseRepository.js` also sets a per-object ACL (read/write
+restricted to the owning user, no public access) when a case is created.
+Cloud Code uses the master key and therefore never actually relies on this
+ACL for its own access -- it's defense-in-depth for if `MMCase`'s CLP is
+ever loosened to allow direct client reads.
+
+### Remaining backend work before Sign in with Apple works end-to-end
+
+The iOS client and this Cloud Code are both ready to *use* Sign in with
+Apple, but nothing in this repo can complete the following -- they require
+dashboard/portal access this codebase can't configure on its own:
+
+1. Enable the Sign In With Apple capability for this app's App ID in the
+   Apple Developer portal, and add the corresponding entitlement/
+   provisioning profile for the Xcode target (see the iOS deliverables
+   section for what's already scaffolded there).
+2. Enable and configure Back4App's Apple auth adapter (step 4 above) with
+   this app's bundle id.
+3. Optionally enable email verification and confirm the password-reset
+   email template/sender (steps 5-6 above) before shipping.
+
+Until (2) is done, `ParseUser.apple.login` will fail server-side with an
+auth-adapter configuration error -- `AppleSignInService`/
+`ParseAuthenticationService` surface that as a normal sign-in failure, not
+a crash.
+
+---
+
 ## Parse `MMCase` schema
 
 One Parse class, `MMCase`, represents a single case-preparation session.
@@ -157,6 +244,7 @@ Parse supplies `objectId`, `createdAt`, `updatedAt` automatically.
 
 | Field                    | Type    | Notes |
 | ------------------------- | ------- | ----- |
+| `owner`                   | Pointer\<`_User`\> | Set once at creation from `request.user`, never from a client param. Every Cloud Function that reads or mutates a case checks this against the caller before doing so. |
 | `status`                  | String  | One of `collecting_information`, `ready_to_finalize`, `completed`. See `schemas/caseStatus.js`. |
 | `originalNarrative`       | String  | The trainee's original dictated text. |
 | `extractedCase`           | Object  | Flexible structured case data. Only fields the AI actually populated are present -- see `schemas/extractedCaseSchema.js` for the full list of recognized (not required) fields. |
@@ -267,10 +355,15 @@ details):
 
 | Situation                                   | Parse.Error code |
 | --------------------------------------------- | ----------------- |
+| No signed-in user (missing/invalid session)   | `INVALID_SESSION_TOKEN` |
 | Missing/empty/too-short input                 | `VALIDATION_ERROR` |
-| Case not found (including malformed caseId)   | `OBJECT_NOT_FOUND` |
+| Case not found, malformed caseId, **or case belongs to a different user** | `OBJECT_NOT_FOUND` |
 | Stale question, already-completed, still collecting | `OPERATION_FORBIDDEN` |
 | AI provider or AI response problem            | `INTERNAL_SERVER_ERROR` |
+
+A case owned by another user is reported identically to a case that
+doesn't exist (`OBJECT_NOT_FOUND`) -- a valid caseId alone must never
+confirm that a case exists if the caller doesn't own it.
 
 ---
 

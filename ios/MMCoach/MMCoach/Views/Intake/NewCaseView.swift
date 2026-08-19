@@ -11,28 +11,38 @@ import SwiftUI
 struct NewCaseView: View {
     @StateObject private var viewModel = NewCaseViewModel()
     @Binding var path: [AppRoute]
-    @FocusState private var isEditorFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Describe the case as you would present it at M&M.")
-                .font(.title3.weight(.semibold))
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    header
+                    editorCard
 
-            narrativeEditor
+                    if !viewModel.spellingSuggestions.isEmpty {
+                        Text("Double-check spelling: \(viewModel.spellingSuggestions.joined(separator: ", "))")
+                            .font(.footnote)
+                            .foregroundStyle(Color.slateText)
+                    }
 
-            if let errorMessage = viewModel.errorMessage {
-                Text(errorMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
+                    if let errorMessage = viewModel.errorMessage {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 24)
             }
+            .scrollDismissesKeyboard(.interactively)
 
-            micButton
+            Divider()
+                .opacity(0.5)
 
-            Spacer(minLength: 0)
-
-            continueButton
+            continueFooter
         }
-        .padding()
+        .background(Color.warmBackground)
         .navigationTitle("New Case")
         .navigationBarTitleDisplayMode(.inline)
         .alert("Dictation Unavailable",
@@ -42,46 +52,75 @@ struct NewCaseView: View {
         } message: { message in
             Text(message)
         }
-    }
-
-    private var narrativeEditor: some View {
-        TextEditor(text: $viewModel.narrativeText)
-            .focused($isEditorFocused)
-            .font(.body)
-            .scrollContentBackground(.hidden)
-            .padding(12)
-            .frame(minHeight: 220)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
-            .overlay(alignment: .topLeading) {
-                if viewModel.narrativeText.isEmpty {
-                    Text("A 68-year-old man underwent CABG x3. He was initially stable in the ICU…")
-                        .font(.body)
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 20)
-                        .allowsHitTesting(false)
-                }
-            }
-    }
-
-    private var micButton: some View {
-        HStack {
-            Spacer()
-            Button {
-                isEditorFocused = false
-                Task { await viewModel.toggleDictation() }
-            } label: {
-                Image(systemName: viewModel.isRecording ? "mic.fill" : "mic")
-                    .font(.title)
-                    .foregroundStyle(viewModel.isRecording ? Color.white : Color.accentColor)
-                    .frame(width: 64, height: 64)
-                    .background(
-                        Circle().fill(viewModel.isRecording ? Color.accentColor : Color(.secondarySystemBackground))
-                    )
-            }
-            .accessibilityLabel(viewModel.isRecording ? "Stop dictation" : "Start dictation")
-            Spacer()
+        .alert("Possible Patient Information Removed",
+               isPresented: phiNoticeBinding,
+               presenting: viewModel.phiNoticeMessage) { _ in
+            Button("OK") { viewModel.phiNoticeMessage = nil }
+        } message: { message in
+            Text(message)
         }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Describe the case")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text("Present it as you would at M&M conference.")
+                .font(.subheadline)
+                .foregroundStyle(Color.slateText)
+        }
+    }
+
+    /// Boxes the dictate-or-type hint together with the editor and its mic
+    /// control so the whole "how to give me the case" unit reads as one
+    /// intentional surface, consistent with the Home screen's card style.
+    private var editorCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            inputModeHint
+
+            DictationEditorView(
+                text: $viewModel.narrativeText,
+                phase: viewModel.dictationPhase,
+                placeholder: "A 68-year-old man underwent CABG x3. He was initially stable in the ICU…",
+                minHeight: 200,
+                onToggleDictation: { Task { await viewModel.toggleDictation() } }
+            )
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+    }
+
+    /// A single flowing sentence (built via `Text` concatenation rather
+    /// than separate `Text`/`Image` views) so it wraps naturally as one
+    /// paragraph on narrow screens instead of breaking mid-phrase.
+    private var inputModeHint: some View {
+        (
+            Text(Image(systemName: "mic.fill")).foregroundStyle(Color.mutedTeal)
+            + Text(" Dictate").foregroundStyle(.primary)
+            + Text(" or ").foregroundStyle(Color.slateText)
+            + Text(Image(systemName: "keyboard")).foregroundStyle(Color.mutedTeal)
+            + Text(" type").foregroundStyle(.primary)
+            + Text(" — whichever is easier.").foregroundStyle(Color.slateText)
+        )
+        .font(.footnote.weight(.medium))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("You can dictate or type the case summary, whichever is easier.")
+    }
+
+    private var continueFooter: some View {
+        continueButton
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
+            .background(Color.warmBackground)
     }
 
     private var continueButton: some View {
@@ -94,14 +133,12 @@ struct NewCaseView: View {
         } label: {
             if viewModel.isSubmitting {
                 ProgressView()
-                    .frame(maxWidth: .infinity)
+                    .tint(.white)
             } else {
                 Text("Continue")
-                    .frame(maxWidth: .infinity)
             }
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
+        .buttonStyle(.michiganProminent)
         .disabled(!viewModel.canContinue)
     }
 
@@ -110,6 +147,15 @@ struct NewCaseView: View {
             get: { viewModel.dictationErrorMessage != nil },
             set: { isPresented in
                 if !isPresented { viewModel.dictationErrorMessage = nil }
+            }
+        )
+    }
+
+    private var phiNoticeBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.phiNoticeMessage != nil },
+            set: { isPresented in
+                if !isPresented { viewModel.phiNoticeMessage = nil }
             }
         )
     }

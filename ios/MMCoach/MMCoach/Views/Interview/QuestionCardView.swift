@@ -13,14 +13,23 @@ struct QuestionCardView: View {
     let question: MMQuestion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("I need one more detail:")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Text(question.text)
-                .font(.title3.weight(.semibold))
-                .fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .top, spacing: 0) {
+            Rectangle()
+                .fill(Color.maize)
+                .frame(width: 4)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("I need one more detail:")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(question.text)
+                    .font(.title3.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding()
         }
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

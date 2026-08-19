@@ -16,8 +16,9 @@ struct FacultyQuestionsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Likely Faculty Questions")
+                Label("Likely Faculty Questions", systemImage: "person.fill.questionmark")
                     .font(.headline)
+                    .foregroundStyle(Color.michiganBlueText)
 
                 if questions.isEmpty {
                     Text("No faculty questions yet.")
@@ -25,8 +26,8 @@ struct FacultyQuestionsView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     VStack(alignment: .leading, spacing: 16) {
-                        ForEach(Array(questions.enumerated()), id: \.offset) { _, question in
-                            questionRow(question)
+                        ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
+                            questionRow(number: index + 1, question: question)
                         }
                     }
                 }
@@ -35,11 +36,14 @@ struct FacultyQuestionsView: View {
         }
     }
 
-    private func questionRow(_ question: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: "person.fill.questionmark")
-                .foregroundStyle(.secondary)
-                .font(.footnote)
+    private func questionRow(number: Int, question: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text("\(number)")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.michiganBlueText)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(Color.maizeTint))
+                .padding(.top, 1)
             Text(question)
                 .font(.body)
                 .fixedSize(horizontal: false, vertical: true)

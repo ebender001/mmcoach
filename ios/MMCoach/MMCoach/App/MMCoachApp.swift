@@ -15,7 +15,8 @@ struct MMCoachApp: App {
 
     var body: some Scene {
         WindowGroup {
-            HomeView()
+            RootView()
+                .tint(.michiganBlueText)
         }
     }
 }

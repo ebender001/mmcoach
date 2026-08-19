@@ -11,8 +11,9 @@ struct DiscussionPrepView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Be Prepared to Discuss")
+                Label("Be Prepared to Discuss", systemImage: "bubble.left.and.bubble.right.fill")
                     .font(.headline)
+                    .foregroundStyle(Color.michiganBlueText)
 
                 if topics.isEmpty {
                     Text("No discussion topics yet.")
@@ -44,9 +45,7 @@ struct DiscussionPrepView: View {
             }
             .padding(.top, 4)
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+        .polishedCard()
     }
 }
 

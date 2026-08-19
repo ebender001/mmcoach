@@ -33,6 +33,13 @@ class InvalidStateError extends AppError {
   }
 }
 
+class AuthenticationError extends AppError {
+  constructor(message) {
+    super(message, 'AUTHENTICATION_ERROR');
+    this.name = 'AuthenticationError';
+  }
+}
+
 class AIProviderError extends AppError {
   constructor(message) {
     super(message, 'AI_PROVIDER_ERROR');
@@ -66,6 +73,9 @@ function toParseError(err) {
   if (err instanceof InvalidStateError) {
     return new Parse.Error(Parse.Error.OPERATION_FORBIDDEN, err.message);
   }
+  if (err instanceof AuthenticationError) {
+    return new Parse.Error(Parse.Error.INVALID_SESSION_TOKEN, err.message);
+  }
   if (err instanceof AIProviderError || err instanceof AIResponseError) {
     return new Parse.Error(Parse.Error.INTERNAL_SERVER_ERROR, err.message);
   }
@@ -81,6 +91,7 @@ module.exports = {
   ValidationError,
   NotFoundError,
   InvalidStateError,
+  AuthenticationError,
   AIProviderError,
   AIResponseError,
   toParseError,

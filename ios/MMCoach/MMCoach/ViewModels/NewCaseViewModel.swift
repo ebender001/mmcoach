@@ -8,42 +8,62 @@ import Combine
 
 @MainActor
 final class NewCaseViewModel: ObservableObject {
-    @Published var narrativeText = ""
-    @Published private(set) var isRecording = false
+    @Published var narrativeText = "" {
+        didSet {
+            spellingSuggestions = medicalDictionary.possibleMisspellings(in: narrativeText)
+        }
+    }
     @Published private(set) var isSubmitting = false
     @Published var errorMessage: String?
+    @Published private(set) var spellingSuggestions: [String] = []
+    /// Mirrors `dictation.dictationPhase`/`dictationErrorMessage`/
+    /// `phiNoticeMessage` so the view only needs to observe this one
+    /// object -- see observeDictation().
+    @Published private(set) var dictationPhase: DictationPhase = .idle
     @Published var dictationErrorMessage: String?
+    @Published var phiNoticeMessage: String?
 
-    let speechService: SpeechRecognitionService
+    let dictation: DictationController
 
     private let store: RecentCasesStore
-    private var narrativeBeforeDictation = ""
+    private let medicalDictionary: MedicalDictionaryService
+    private let phiFilter: PHIFilterService
     private var observationTasks: [Task<Void, Never>] = []
 
     private static let minimumNarrativeLength = 20
 
-    init(speechService: SpeechRecognitionService? = nil,
-         store: RecentCasesStore? = nil) {
-        self.speechService = speechService ?? SpeechRecognitionService()
+    var isDictating: Bool { dictationPhase != .idle }
+
+    init(dictation: DictationController? = nil,
+         store: RecentCasesStore? = nil,
+         medicalDictionary: MedicalDictionaryService? = nil,
+         phiFilter: PHIFilterService? = nil) {
+        let medicalDictionary = medicalDictionary ?? .shared(for: SpecialtyStore.shared.selected)
+        self.dictation = dictation ?? DictationController(medicalDictionary: medicalDictionary)
         self.store = store ?? RecentCasesStore()
-        observeSpeechService()
+        self.medicalDictionary = medicalDictionary
+        self.phiFilter = phiFilter ?? .shared
+        self.dictation.onCorrectedText = { [weak self] text in
+            self?.narrativeText = text
+        }
+        observeDictation()
     }
 
     deinit {
         observationTasks.forEach { $0.cancel() }
     }
 
+    /// Enabled as soon as there's any typed/dictated text -- the stricter
+    /// `minimumNarrativeLength` check happens on submit (see `submit()`),
+    /// which surfaces a specific inline message instead of just leaving
+    /// the button disabled with no explanation.
     var canContinue: Bool {
-        !isSubmitting && narrativeText.trimmingCharacters(in: .whitespacesAndNewlines).count >= Self.minimumNarrativeLength
+        dictationPhase == .idle && !isSubmitting
+            && !narrativeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func toggleDictation() async {
-        if speechService.isRecording {
-            speechService.stopDictation()
-        } else {
-            narrativeBeforeDictation = narrativeText
-            await speechService.startDictation()
-        }
+        await dictation.toggleDictation(currentText: narrativeText)
     }
 
     /// Submits the narrative and returns the created case, or nil on failure
@@ -56,8 +76,17 @@ final class NewCaseViewModel: ObservableObject {
             return nil
         }
 
-        if speechService.isRecording {
-            speechService.stopDictation()
+        // Final on-device PHI screen before anything is sent to the
+        // backend (which forwards the narrative to OpenAI) -- catches PHI
+        // typed by hand, which dictation-time screening never saw. If
+        // anything is found, show the trainee the redacted result instead
+        // of silently submitting a rewritten narrative -- they can review
+        // it and tap Continue again.
+        let phiResult = phiFilter.redact(trimmed)
+        if phiResult.hasFindings {
+            narrativeText = phiResult.redactedText
+            phiNoticeMessage = phiResult.noticeMessage
+            return nil
         }
 
         isSubmitting = true
@@ -81,28 +110,26 @@ final class NewCaseViewModel: ObservableObject {
         return singleLine.count > 60 ? String(singleLine.prefix(60)) + "…" : singleLine
     }
 
-    private func observeSpeechService() {
-        let transcriptTask = Task { [weak self] in
+    private func observeDictation() {
+        let phaseTask = Task { [weak self] in
             guard let self else { return }
-            for await sessionText in self.speechService.$sessionTranscript.values {
-                guard !sessionText.isEmpty else { continue }
-                self.narrativeText = self.narrativeBeforeDictation.isEmpty
-                    ? sessionText
-                    : self.narrativeBeforeDictation + " " + sessionText
-            }
-        }
-        let recordingTask = Task { [weak self] in
-            guard let self else { return }
-            for await recording in self.speechService.$isRecording.values {
-                self.isRecording = recording
+            for await phase in self.dictation.$dictationPhase.values {
+                self.dictationPhase = phase
             }
         }
         let errorTask = Task { [weak self] in
             guard let self else { return }
-            for await dictationError in self.speechService.$error.values {
-                self.dictationErrorMessage = dictationError?.errorDescription
+            for await message in self.dictation.$dictationErrorMessage.values {
+                self.dictationErrorMessage = message
             }
         }
-        observationTasks = [transcriptTask, recordingTask, errorTask]
+        let phiTask = Task { [weak self] in
+            guard let self else { return }
+            for await message in self.dictation.$phiNoticeMessage.values {
+                guard message != nil else { continue }
+                self.phiNoticeMessage = message
+            }
+        }
+        observationTasks = [phaseTask, errorTask, phiTask]
     }
 }

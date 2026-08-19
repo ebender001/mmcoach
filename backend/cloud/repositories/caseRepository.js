@@ -2,10 +2,15 @@
  * The only module that touches Parse.Object / Parse.Query directly for
  * MMCase. Everything else works with plain JSON case objects.
  *
- * Uses the master key because MMCase has no per-user ownership in the MVP
- * (there is no Parse User auth yet). Class-Level Permissions on MMCase
- * should deny direct client REST access so only Cloud Code can read/write
- * it -- see README "Back4App setup".
+ * Uses the master key because Cloud Code is the only path allowed to
+ * read/write MMCase -- Class-Level Permissions on MMCase deny direct
+ * client REST/SDK access (see README "Back4App setup"). Master key use
+ * means Parse's own ACL enforcement never runs here, so per-user
+ * ownership is enforced explicitly in `services/caseService.js` (it
+ * compares `request.user.id` against the `ownerId` this module returns)
+ * rather than relied upon implicitly. The ACL this module still sets on
+ * every case is defense-in-depth for if CLP is ever loosened later, not
+ * the primary access-control mechanism.
  */
 const CASE_CLASS_NAME = 'MMCase';
 
@@ -20,8 +25,10 @@ function applyFields(parseObject, fields) {
 }
 
 function toClientJSON(parseObject) {
+  const owner = parseObject.get('owner');
   return {
     objectId: parseObject.id,
+    ownerId: owner ? owner.id : null,
     status: parseObject.get('status'),
     originalNarrative: parseObject.get('originalNarrative') || '',
     extractedCase: parseObject.get('extractedCase') || {},
@@ -38,10 +45,27 @@ function toClientJSON(parseObject) {
   };
 }
 
-async function create(record) {
+/**
+ * `record` must include `ownerId` -- the authenticated caller's user id,
+ * resolved by the Cloud Function from `request.user` (see
+ * `utils/validation.js#requireAuthenticatedUser`). Never accept an
+ * `ownerId` sourced from client params.
+ */
+async function create({ ownerId, ...record }) {
   const MMCase = getMMCaseClass();
   const parseObject = new MMCase();
   applyFields(parseObject, record);
+
+  const owner = Parse.User.createWithoutData(ownerId);
+  parseObject.set('owner', owner);
+
+  const acl = new Parse.ACL();
+  acl.setPublicReadAccess(false);
+  acl.setPublicWriteAccess(false);
+  acl.setReadAccess(ownerId, true);
+  acl.setWriteAccess(ownerId, true);
+  parseObject.setACL(acl);
+
   await parseObject.save(null, { useMasterKey: true });
   return toClientJSON(parseObject);
 }

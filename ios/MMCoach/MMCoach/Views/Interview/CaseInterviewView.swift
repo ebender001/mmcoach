@@ -12,7 +12,6 @@ import SwiftUI
 struct CaseInterviewView: View {
     @StateObject private var viewModel: CaseInterviewViewModel
     @Binding var path: [AppRoute]
-    @FocusState private var isAnswerFieldFocused: Bool
 
     init(viewModel: @autoclosure @escaping () -> CaseInterviewViewModel, path: Binding<[AppRoute]>) {
         _viewModel = StateObject(wrappedValue: viewModel())
@@ -38,13 +37,19 @@ struct CaseInterviewView: View {
         VStack(alignment: .leading, spacing: 20) {
             QuestionCardView(question: question)
 
-            TextEditor(text: $viewModel.answerText)
-                .focused($isAnswerFieldFocused)
-                .font(.body)
-                .scrollContentBackground(.hidden)
-                .padding(12)
-                .frame(minHeight: 140)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+            DictationEditorView(
+                text: $viewModel.answerText,
+                phase: viewModel.dictationPhase,
+                placeholder: "Answer as you would explain it out loud…",
+                minHeight: 140,
+                onToggleDictation: { Task { await viewModel.toggleDictation() } }
+            )
+
+            if !viewModel.spellingSuggestions.isEmpty {
+                Text("Double-check spelling: \(viewModel.spellingSuggestions.joined(separator: ", "))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             if let errorMessage = viewModel.errorMessage {
                 Text(errorMessage)
@@ -55,29 +60,59 @@ struct CaseInterviewView: View {
             Spacer(minLength: 0)
 
             Button {
-                isAnswerFieldFocused = false
                 Task { await viewModel.submitAnswer() }
             } label: {
                 if viewModel.isSubmittingAnswer {
-                    ProgressView().frame(maxWidth: .infinity)
+                    ProgressView().tint(.white)
                 } else {
-                    Text("Submit Answer").frame(maxWidth: .infinity)
+                    Text("Submit Answer")
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.michiganProminent)
             .disabled(!viewModel.canSubmitAnswer)
         }
         .padding()
+        .alert("Dictation Unavailable",
+               isPresented: dictationErrorBinding,
+               presenting: viewModel.dictationErrorMessage) { _ in
+            Button("OK") { viewModel.dictationErrorMessage = nil }
+        } message: { message in
+            Text(message)
+        }
+        .alert("Possible Patient Information Removed",
+               isPresented: phiNoticeBinding,
+               presenting: viewModel.phiNoticeMessage) { _ in
+            Button("OK") { viewModel.phiNoticeMessage = nil }
+        } message: { message in
+            Text(message)
+        }
+    }
+
+    private var dictationErrorBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.dictationErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented { viewModel.dictationErrorMessage = nil }
+            }
+        )
+    }
+
+    private var phiNoticeBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.phiNoticeMessage != nil },
+            set: { isPresented in
+                if !isPresented { viewModel.phiNoticeMessage = nil }
+            }
+        )
     }
 
     private var readyToFinalizeContent: some View {
         VStack(spacing: 20) {
             Spacer()
 
-            Image(systemName: "checkmark.circle")
+            Image(systemName: "checkmark.circle.fill")
                 .font(.largeTitle)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.michiganBlueText)
 
             Text("Your case is ready to prepare.")
                 .font(.title3.weight(.semibold))
@@ -106,10 +141,9 @@ struct CaseInterviewView: View {
                         }
                     }
                 } label: {
-                    Text("Prepare Case").frame(maxWidth: .infinity)
+                    Text("Prepare Case")
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.michiganProminent)
             }
         }
         .padding()

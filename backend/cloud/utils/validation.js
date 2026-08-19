@@ -1,4 +1,4 @@
-const { ValidationError } = require('./errors');
+const { ValidationError, AuthenticationError } = require('./errors');
 
 function requireNonEmptyString(value, fieldName) {
   if (typeof value !== 'string') {
@@ -26,4 +26,19 @@ function requireMeaningfulNarrative(value, { minLength = 20 } = {}) {
   return trimmed;
 }
 
-module.exports = { requireNonEmptyString, requireMeaningfulNarrative };
+/**
+ * Every MMCase-touching Cloud Function must resolve the owner from the
+ * *authenticated request's* session, never from a client-supplied param --
+ * this is the one place that boundary is enforced. `request.user` is
+ * populated by Parse Server from the caller's session token; there is no
+ * client input involved.
+ */
+function requireAuthenticatedUser(request) {
+  const userId = request && request.user && request.user.id;
+  if (!userId) {
+    throw new AuthenticationError('Sign in required.');
+  }
+  return userId;
+}
+
+module.exports = { requireNonEmptyString, requireMeaningfulNarrative, requireAuthenticatedUser };

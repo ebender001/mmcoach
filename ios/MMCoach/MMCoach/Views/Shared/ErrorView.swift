@@ -24,7 +24,7 @@ struct ErrorView: View {
                 .foregroundStyle(.secondary)
             if let onRetry {
                 Button(retryTitle, action: onRetry)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.michiganBordered)
             }
         }
         .padding()

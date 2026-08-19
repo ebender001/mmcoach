@@ -1,5 +1,5 @@
 const caseService = require('../services/caseService');
-const { requireMeaningfulNarrative } = require('../utils/validation');
+const { requireMeaningfulNarrative, requireAuthenticatedUser } = require('../utils/validation');
 const { toParseError } = require('../utils/errors');
 const logger = require('../utils/logger');
 
@@ -7,8 +7,9 @@ Parse.Cloud.define('mmCreateCase', async (request) => {
   const startedAt = Date.now();
   const params = request.params || {};
   try {
+    const ownerId = requireAuthenticatedUser(request);
     const narrative = requireMeaningfulNarrative(params.narrative);
-    const caseState = await caseService.createCase({ narrative });
+    const caseState = await caseService.createCase({ narrative, ownerId });
 
     logger.info({
       function: 'mmCreateCase',
@@ -22,4 +23,4 @@ Parse.Cloud.define('mmCreateCase', async (request) => {
     logger.error({ function: 'mmCreateCase', message: err.message });
     throw toParseError(err);
   }
-});
+}, { requireUser: true });

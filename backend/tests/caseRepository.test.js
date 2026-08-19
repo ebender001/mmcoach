@@ -1,11 +1,13 @@
 const { createFakeParse } = require('./helpers/fakeParse');
 
-global.Parse = createFakeParse().Parse;
+const { Parse, store } = createFakeParse();
+global.Parse = Parse;
 
 const caseRepository = require('../cloud/repositories/caseRepository');
 
 function baseRecord(overrides = {}) {
   return {
+    ownerId: 'user1',
     status: 'collecting_information',
     originalNarrative: 'narrative text',
     extractedCase: { procedure: 'CABG' },
@@ -26,9 +28,20 @@ describe('caseRepository', () => {
     const created = await caseRepository.create(baseRecord());
 
     expect(created.objectId).toBeDefined();
+    expect(created.ownerId).toBe('user1');
     expect(created.status).toBe('collecting_information');
     expect(created.extractedCase).toEqual({ procedure: 'CABG' });
     expect(created.createdAt).toBeInstanceOf(Date);
+  });
+
+  it('restricts the saved object ACL to the owning user, with no public access', async () => {
+    const created = await caseRepository.create(baseRecord());
+    const acl = store.get(created.objectId).acl;
+
+    expect(acl.publicRead).toBe(false);
+    expect(acl.publicWrite).toBe(false);
+    expect(acl.readAccess.has('user1')).toBe(true);
+    expect(acl.writeAccess.has('user1')).toBe(true);
   });
 
   it('retrieves a previously created case by id', async () => {

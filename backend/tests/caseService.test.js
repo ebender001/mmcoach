@@ -14,6 +14,7 @@ const { CaseStatus } = require('../cloud/schemas/caseStatus');
 function baseCaseState(overrides = {}) {
   return {
     objectId: 'case1',
+    ownerId: 'user1',
     status: CaseStatus.COLLECTING_INFORMATION,
     originalNarrative: 'narrative',
     extractedCase: { procedure: 'CABG x3' },
@@ -50,7 +51,7 @@ describe('createCase', () => {
     });
     caseRepository.update.mockImplementation(async (id, patch) => ({ ...created, ...patch }));
 
-    const result = await caseService.createCase({ narrative: 'A 68 year old man...' });
+    const result = await caseService.createCase({ narrative: 'A 68 year old man...', ownerId: 'user1' });
 
     expect(result.status).toBe(CaseStatus.COLLECTING_INFORMATION);
     expect(result.currentQuestion.question).toBe('How long after surgery did hypotension begin?');
@@ -72,7 +73,7 @@ describe('createCase', () => {
     });
     caseRepository.update.mockImplementation(async (id, patch) => ({ ...created, ...patch }));
 
-    const result = await caseService.createCase({ narrative: 'A fully detailed narrative...' });
+    const result = await caseService.createCase({ narrative: 'A fully detailed narrative...', ownerId: 'user1' });
 
     expect(result.status).toBe(CaseStatus.READY_TO_FINALIZE);
     expect(result.currentQuestion).toBeNull();
@@ -81,7 +82,7 @@ describe('createCase', () => {
   it('propagates AI provider failures rather than storing a corrupted case', async () => {
     caseAnalyzer.analyzeInitialNarrative.mockRejectedValue(new AIProviderError('AI provider returned status 500.'));
 
-    await expect(caseService.createCase({ narrative: 'narrative' })).rejects.toThrow(AIProviderError);
+    await expect(caseService.createCase({ narrative: 'narrative', ownerId: 'user1' })).rejects.toThrow(AIProviderError);
     expect(caseRepository.create).not.toHaveBeenCalled();
   });
 });
@@ -91,7 +92,15 @@ describe('answerQuestion', () => {
     caseRepository.getById.mockResolvedValue(null);
 
     await expect(
-      caseService.answerQuestion({ caseId: 'missing', questionId: 'q1', answer: 'yes' })
+      caseService.answerQuestion({ caseId: 'missing', questionId: 'q1', answer: 'yes', ownerId: 'user1' })
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it('throws NotFoundError (not a permission error) when the case belongs to a different user', async () => {
+    caseRepository.getById.mockResolvedValue(baseCaseState({ ownerId: 'someone-else' }));
+
+    await expect(
+      caseService.answerQuestion({ caseId: 'case1', questionId: 'q1', answer: 'yes', ownerId: 'user1' })
     ).rejects.toThrow(NotFoundError);
   });
 
@@ -103,7 +112,7 @@ describe('answerQuestion', () => {
     );
 
     await expect(
-      caseService.answerQuestion({ caseId: 'case1', questionId: 'stale-question', answer: 'yes' })
+      caseService.answerQuestion({ caseId: 'case1', questionId: 'stale-question', answer: 'yes', ownerId: 'user1' })
     ).rejects.toThrow(InvalidStateError);
   });
 
@@ -111,7 +120,7 @@ describe('answerQuestion', () => {
     caseRepository.getById.mockResolvedValue(baseCaseState({ status: CaseStatus.READY_TO_FINALIZE, currentQuestion: null }));
 
     await expect(
-      caseService.answerQuestion({ caseId: 'case1', questionId: 'q1', answer: 'yes' })
+      caseService.answerQuestion({ caseId: 'case1', questionId: 'q1', answer: 'yes', ownerId: 'user1' })
     ).rejects.toThrow(InvalidStateError);
   });
 
@@ -133,7 +142,7 @@ describe('answerQuestion', () => {
       promptVersion: '1.0.0',
     });
 
-    const result = await caseService.answerQuestion({ caseId: 'case1', questionId: 'q1', answer: '4 hours after ICU arrival' });
+    const result = await caseService.answerQuestion({ caseId: 'case1', questionId: 'q1', answer: '4 hours after ICU arrival', ownerId: 'user1' });
 
     expect(caseAnalyzer.incorporateAnswer).toHaveBeenCalled();
     expect(result.currentQuestion.question).toBe('What was the chest tube output?');
@@ -157,7 +166,7 @@ describe('answerQuestion', () => {
       promptVersion: '1.0.0',
     });
 
-    const result = await caseService.answerQuestion({ caseId: 'case1', questionId: 'q1', answer: 'final answer' });
+    const result = await caseService.answerQuestion({ caseId: 'case1', questionId: 'q1', answer: 'final answer', ownerId: 'user1' });
 
     expect(result.status).toBe(CaseStatus.READY_TO_FINALIZE);
     expect(result.currentQuestion).toBeNull();
@@ -168,19 +177,25 @@ describe('finalizeCase', () => {
   it('throws InvalidStateError when the case still has an open question', async () => {
     caseRepository.getById.mockResolvedValue(baseCaseState({ status: CaseStatus.COLLECTING_INFORMATION }));
 
-    await expect(caseService.finalizeCase({ caseId: 'case1' })).rejects.toThrow(InvalidStateError);
+    await expect(caseService.finalizeCase({ caseId: 'case1', ownerId: 'user1' })).rejects.toThrow(InvalidStateError);
   });
 
   it('throws InvalidStateError when the case is already completed', async () => {
     caseRepository.getById.mockResolvedValue(baseCaseState({ status: CaseStatus.COMPLETED }));
 
-    await expect(caseService.finalizeCase({ caseId: 'case1' })).rejects.toThrow(InvalidStateError);
+    await expect(caseService.finalizeCase({ caseId: 'case1', ownerId: 'user1' })).rejects.toThrow(InvalidStateError);
   });
 
   it('throws NotFoundError for a nonexistent case', async () => {
     caseRepository.getById.mockResolvedValue(null);
 
-    await expect(caseService.finalizeCase({ caseId: 'missing' })).rejects.toThrow(NotFoundError);
+    await expect(caseService.finalizeCase({ caseId: 'missing', ownerId: 'user1' })).rejects.toThrow(NotFoundError);
+  });
+
+  it('throws NotFoundError when the case belongs to a different user', async () => {
+    caseRepository.getById.mockResolvedValue(baseCaseState({ status: CaseStatus.READY_TO_FINALIZE, ownerId: 'someone-else' }));
+
+    await expect(caseService.finalizeCase({ caseId: 'case1', ownerId: 'user1' })).rejects.toThrow(NotFoundError);
   });
 
   it('generates and persists the finalized case materials', async () => {
@@ -196,7 +211,7 @@ describe('finalizeCase', () => {
     });
     caseRepository.update.mockImplementation(async (id, patch) => ({ ...current, ...patch }));
 
-    const result = await caseService.finalizeCase({ caseId: 'case1' });
+    const result = await caseService.finalizeCase({ caseId: 'case1', ownerId: 'user1' });
 
     expect(result.status).toBe(CaseStatus.COMPLETED);
     expect(result.polishedNarrative).toBe('Polished narrative...');
@@ -208,13 +223,19 @@ describe('getCase', () => {
   it('throws NotFoundError for an unknown case id', async () => {
     caseRepository.getById.mockResolvedValue(null);
 
-    await expect(caseService.getCase({ caseId: 'missing' })).rejects.toThrow(NotFoundError);
+    await expect(caseService.getCase({ caseId: 'missing', ownerId: 'user1' })).rejects.toThrow(NotFoundError);
   });
 
-  it('returns the case state for a known id', async () => {
+  it('throws NotFoundError when the case belongs to a different user', async () => {
+    caseRepository.getById.mockResolvedValue(baseCaseState({ ownerId: 'someone-else' }));
+
+    await expect(caseService.getCase({ caseId: 'case1', ownerId: 'user1' })).rejects.toThrow(NotFoundError);
+  });
+
+  it('returns the case state for a known id owned by the caller', async () => {
     caseRepository.getById.mockResolvedValue(baseCaseState());
 
-    const result = await caseService.getCase({ caseId: 'case1' });
+    const result = await caseService.getCase({ caseId: 'case1', ownerId: 'user1' });
 
     expect(result.objectId).toBe('case1');
   });

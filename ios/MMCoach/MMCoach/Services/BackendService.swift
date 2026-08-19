@@ -74,6 +74,13 @@ enum BackendService {
         try await run(GetCaseFunction(caseId: caseId))
     }
 
+    /// Corrects one freshly-dictated narrative segment. `priorNarrative` is
+    /// passed only as context for disambiguation -- the backend does not
+    /// re-edit it, and only `correctedSegment` should be appended locally.
+    static func correctDictation(priorNarrative: String, newSegment: String) async throws -> CorrectedDictationSegment {
+        try await run(CorrectDictationFunction(priorNarrative: priorNarrative, newSegment: newSegment))
+    }
+
     private static func run<Function: ParseCloudable>(_ function: Function) async throws -> Function.ReturnType {
         do {
             return try await function.runFunction()
@@ -116,4 +123,11 @@ private struct GetCaseFunction: ParseCloudable {
     typealias ReturnType = MMCase
     var functionJobName = "mmGetCase"
     var caseId: String
+}
+
+private struct CorrectDictationFunction: ParseCloudable {
+    typealias ReturnType = CorrectedDictationSegment
+    var functionJobName = "mmCorrectDictation"
+    var priorNarrative: String
+    var newSegment: String
 }

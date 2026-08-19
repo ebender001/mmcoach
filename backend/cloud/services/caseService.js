@@ -13,6 +13,20 @@ const { NotFoundError, InvalidStateError } = require('../utils/errors');
 const { generateId } = require('../utils/idGenerator');
 const logger = require('../utils/logger');
 
+/**
+ * Fetches a case and confirms `ownerId` owns it, in one step. A case that
+ * exists but belongs to someone else is rejected the same way as one that
+ * doesn't exist at all -- a case id alone must never reveal whether it
+ * belongs to another user, let alone grant access to it.
+ */
+async function getOwnedCase(caseId, ownerId) {
+  const caseState = await caseRepository.getById(caseId);
+  if (!caseState || caseState.ownerId !== ownerId) {
+    throw new NotFoundError(`No case found with id ${caseId}.`);
+  }
+  return caseState;
+}
+
 function toNextQuestion(currentQuestion) {
   if (!currentQuestion) return null;
   return {
@@ -75,10 +89,11 @@ async function applyQuestionOutcome(caseState) {
   return saved;
 }
 
-async function createCase({ narrative }) {
+async function createCase({ narrative, ownerId }) {
   const analysis = await caseAnalyzer.analyzeInitialNarrative({ narrative, caseId: 'new' });
 
   const created = await caseRepository.create({
+    ownerId,
     status: CaseStatus.COLLECTING_INFORMATION,
     originalNarrative: narrative,
     extractedCase: analysis.extractedCase,
@@ -95,11 +110,8 @@ async function createCase({ narrative }) {
   return applyQuestionOutcome(created);
 }
 
-async function answerQuestion({ caseId, questionId, answer }) {
-  const caseState = await caseRepository.getById(caseId);
-  if (!caseState) {
-    throw new NotFoundError(`No case found with id ${caseId}.`);
-  }
+async function answerQuestion({ caseId, questionId, answer, ownerId }) {
+  const caseState = await getOwnedCase(caseId, ownerId);
   if (caseState.status !== CaseStatus.COLLECTING_INFORMATION || !caseState.currentQuestion) {
     throw new InvalidStateError('This case is not currently awaiting an answer.');
   }
@@ -132,11 +144,8 @@ async function answerQuestion({ caseId, questionId, answer }) {
   return applyQuestionOutcome(updated);
 }
 
-async function finalizeCase({ caseId }) {
-  const caseState = await caseRepository.getById(caseId);
-  if (!caseState) {
-    throw new NotFoundError(`No case found with id ${caseId}.`);
-  }
+async function finalizeCase({ caseId, ownerId }) {
+  const caseState = await getOwnedCase(caseId, ownerId);
   if (caseState.status === CaseStatus.COLLECTING_INFORMATION) {
     throw new InvalidStateError('This case still has an open question and is not ready to finalize.');
   }
@@ -162,12 +171,8 @@ async function finalizeCase({ caseId }) {
   });
 }
 
-async function getCase({ caseId }) {
-  const caseState = await caseRepository.getById(caseId);
-  if (!caseState) {
-    throw new NotFoundError(`No case found with id ${caseId}.`);
-  }
-  return caseState;
+async function getCase({ caseId, ownerId }) {
+  return getOwnedCase(caseId, ownerId);
 }
 
 /** Response shape for mmCreateCase / mmAnswerQuestion. */

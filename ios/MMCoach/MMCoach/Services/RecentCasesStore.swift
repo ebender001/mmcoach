@@ -45,6 +45,13 @@ struct RecentCasesStore {
         persist(records)
     }
 
+    /// Removes a case from the local index only. The case itself (and its
+    /// backend record) is untouched -- this just stops it from appearing
+    /// in "Recent Cases".
+    func remove(id: String) {
+        persist(loadAll().filter { $0.id != id })
+    }
+
     private func persist(_ records: [RecentCaseRecord]) {
         guard let data = try? JSONEncoder().encode(records) else { return }
         defaults.set(data, forKey: storageKey)

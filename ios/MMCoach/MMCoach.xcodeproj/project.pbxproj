@@ -88,6 +88,11 @@
 				TargetAttributes = {
 					CE5C2D1B30321DE200B0B30E = {
 						CreatedOnToolsVersion = 26.6;
+						SystemCapabilities = {
+							com.apple.SignInWithApple = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -260,9 +265,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MMCoach/App/MMCoach.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = F294KH4KNP;
+				DEVELOPMENT_TEAM = 33QTCM27D5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MMCoach uses the microphone to let you dictate case narratives.";
@@ -294,9 +300,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MMCoach/App/MMCoach.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = F294KH4KNP;
+				DEVELOPMENT_TEAM = 33QTCM27D5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MMCoach uses the microphone to let you dictate case narratives.";

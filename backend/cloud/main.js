@@ -7,3 +7,4 @@ require('./functions/createCase');
 require('./functions/answerQuestion');
 require('./functions/finalizeCase');
 require('./functions/getCase');
+require('./functions/correctDictation');

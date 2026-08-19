@@ -16,8 +16,9 @@ struct ReferencesView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("References")
+                Label("References", systemImage: "books.vertical.fill")
                     .font(.headline)
+                    .foregroundStyle(Color.michiganBlueText)
 
                 if references.isEmpty {
                     Text("No reference topics yet.")
@@ -59,9 +60,7 @@ struct ReferencesView: View {
                     .italic()
             }
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+        .polishedCard()
     }
 }
 

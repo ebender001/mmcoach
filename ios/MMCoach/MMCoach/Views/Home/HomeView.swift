@@ -11,78 +11,148 @@
 import SwiftUI
 
 struct HomeView: View {
-    @StateObject private var viewModel = HomeViewModel()
+    @StateObject private var viewModel: HomeViewModel
+    @ObservedObject private var specialtyStore = SpecialtyStore.shared
     @State private var path: [AppRoute] = []
+    @State private var isPresentingAccount = false
+
+    /// The signed-in user and a sign-out action, both supplied by
+    /// `RootView`. Optional (rather than a required non-Optional
+    /// `AuthenticatedUser`) so `HomeView()` keeps working unchanged in
+    /// previews/tests that don't care about the account area.
+    private let currentUser: AuthenticatedUser?
+    private let onSignOut: (() -> Void)?
+
+    init(currentUser: AuthenticatedUser? = nil, onSignOut: (() -> Void)? = nil) {
+        self.currentUser = currentUser
+        self.onSignOut = onSignOut
+        _viewModel = StateObject(wrappedValue: HomeViewModel())
+    }
+
+    init(currentUser: AuthenticatedUser? = nil, onSignOut: (() -> Void)? = nil, viewModel: HomeViewModel) {
+        self.currentUser = currentUser
+        self.onSignOut = onSignOut
+        _viewModel = StateObject(wrappedValue: viewModel)
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 32) {
-                    startCaseButton
-
-                    recentCasesSection
+            List {
+                Section {
+                    header
                 }
-                .padding()
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+
+                Section {
+                    SpecialtySelectionCard(selection: $specialtyStore.selected)
+                }
+                .listRowSeparator(.hidden)
+                .listRowInsets(rowInsets(top: 4, bottom: 4))
+                .listRowBackground(Color.clear)
+
+                Section {
+                    NewCaseActionCard { path.append(.newCase) }
+                }
+                .listRowSeparator(.hidden)
+                .listRowInsets(rowInsets(top: 4, bottom: 6))
+                .listRowBackground(Color.clear)
+
+                Section {
+                    PrivacyReminder()
+                }
+                .listRowSeparator(.hidden)
+                .listRowInsets(rowInsets(top: 0, bottom: 16))
+                .listRowBackground(Color.clear)
+
+                Section {
+                    recentCasesHeader
+                } header: { EmptyView() }
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(rowInsets(top: 0, bottom: 4))
+                    .listRowBackground(Color.clear)
+
+                if viewModel.recentCases.isEmpty {
+                    Section {
+                        RecentCasesEmptyState()
+                    }
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(rowInsets(top: 0, bottom: 4))
+                    .listRowBackground(Color.clear)
+                } else {
+                    Section {
+                        ForEach(viewModel.recentCases) { record in
+                            Button {
+                                open(record)
+                            } label: {
+                                RecentCaseRow(record: record)
+                            }
+                            .buttonStyle(.plain)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(rowInsets(top: 4, bottom: 4))
+                            .listRowBackground(Color.clear)
+                        }
+                        .onDelete(perform: viewModel.deleteRecentCases)
+                    }
+                }
             }
-            .navigationTitle("MMCoach")
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.warmBackground)
+            .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: AppRoute.self) { route in
                 destination(for: route)
+            }
+            .toolbar {
+                if onSignOut != nil {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button {
+                            isPresentingAccount = true
+                        } label: {
+                            Image(systemName: "person.crop.circle")
+                        }
+                        .accessibilityLabel("Account")
+                    }
+                }
+                if !viewModel.recentCases.isEmpty {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        EditButton()
+                    }
+                }
+            }
+            .sheet(isPresented: $isPresentingAccount) {
+                AccountView(user: currentUser) {
+                    isPresentingAccount = false
+                    onSignOut?()
+                }
             }
         }
         .onAppear { viewModel.refresh() }
     }
 
-    private var startCaseButton: some View {
-        Button {
-            path.append(.newCase)
-        } label: {
-            Label("Start New Case", systemImage: "plus.circle.fill")
-                .font(.title3.weight(.semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-    }
-
-    @ViewBuilder
-    private var recentCasesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Recent Cases")
-                .font(.headline)
-
-            if viewModel.recentCases.isEmpty {
-                emptyState
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(viewModel.recentCases) { record in
-                        Button {
-                            open(record)
-                        } label: {
-                            CaseRowView(record: record)
-                        }
-                        .buttonStyle(.plain)
-
-                        if record.id != viewModel.recentCases.last?.id {
-                            Divider()
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "stethoscope")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-            Text("Start your first case to see it here.")
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("M&M Coach")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(.primary)
+            Text("Case conference preparation")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.slateText)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+    }
+
+    private var recentCasesHeader: some View {
+        Text("Recent Cases")
+            .font(.headline)
+            .foregroundStyle(.primary)
+    }
+
+    private func rowInsets(top: CGFloat, bottom: CGFloat) -> EdgeInsets {
+        EdgeInsets(top: top, leading: 20, bottom: bottom, trailing: 20)
     }
 
     private func open(_ record: RecentCaseRecord) {
@@ -108,6 +178,22 @@ struct HomeView: View {
     }
 }
 
-#Preview {
+#Preview("Empty") {
     HomeView()
+}
+
+#Preview("Populated") {
+    let store = RecentCasesStore(defaults: {
+        let defaults = UserDefaults(suiteName: "HomeView.Populated.Preview")!
+        defaults.removePersistentDomain(forName: "HomeView.Populated.Preview")
+        return defaults
+    }())
+    for record in [
+        RecentCaseRecord(id: "1", title: "68-year-old man, CABG x3, postoperative bleeding", createdAt: Date(), status: .collectingInformation),
+        RecentCaseRecord(id: "2", title: "54-year-old woman, laparoscopic cholecystectomy, bile leak", createdAt: Date().addingTimeInterval(-86_400), status: .readyToFinalize),
+        RecentCaseRecord(id: "3", title: "72-year-old man, AAA repair, postoperative MI", createdAt: Date().addingTimeInterval(-172_800), status: .completed)
+    ] {
+        store.upsert(record)
+    }
+    return HomeView(viewModel: HomeViewModel(store: store))
 }

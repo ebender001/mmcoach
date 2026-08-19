@@ -98,8 +98,32 @@ function validateFinalizeCaseResponse(data) {
   };
 }
 
+function validateCorrectDictationResponse(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new AIResponseError('Correct-dictation response was not a JSON object.');
+  }
+  if (!isNonEmptyString(data.correctedSegment)) {
+    throw new AIResponseError('Correct-dictation response is missing "correctedSegment".');
+  }
+
+  const changes = Array.isArray(data.changes)
+    ? data.changes
+        .filter(
+          (change) =>
+            change &&
+            typeof change === 'object' &&
+            isNonEmptyString(change.original) &&
+            isNonEmptyString(change.corrected)
+        )
+        .map((change) => ({ original: change.original.trim(), corrected: change.corrected.trim() }))
+    : [];
+
+  return { correctedSegment: data.correctedSegment.trim(), changes };
+}
+
 module.exports = {
   validateAnalyzeCaseResponse,
   validateNextQuestionResponse,
   validateFinalizeCaseResponse,
+  validateCorrectDictationResponse,
 };

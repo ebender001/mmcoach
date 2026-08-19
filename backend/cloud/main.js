@@ -7,5 +7,7 @@ require('./functions/createCase');
 require('./functions/answerQuestion');
 require('./functions/finalizeCase');
 require('./functions/getCase');
+require('./functions/updatePolishedNarrative');
 require('./functions/getCaseAICost');
+require('./functions/findReferences');
 require('./functions/correctDictation');

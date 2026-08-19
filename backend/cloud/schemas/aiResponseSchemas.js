@@ -121,9 +121,20 @@ function validateCorrectDictationResponse(data) {
   return { correctedSegment: data.correctedSegment.trim(), changes };
 }
 
+function validateReferenceQueryResponse(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new AIResponseError('Reference-query response was not a JSON object.');
+  }
+  if (!isNonEmptyString(data.query)) {
+    throw new AIResponseError('Reference-query response is missing "query".');
+  }
+  return { query: data.query.trim() };
+}
+
 module.exports = {
   validateAnalyzeCaseResponse,
   validateNextQuestionResponse,
   validateFinalizeCaseResponse,
   validateCorrectDictationResponse,
+  validateReferenceQueryResponse,
 };

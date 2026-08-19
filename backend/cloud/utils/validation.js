@@ -16,11 +16,11 @@ function requireNonEmptyString(value, fieldName) {
  * heuristic, not a clinical-content check -- the AI is responsible for
  * deciding whether the content is usable.
  */
-function requireMeaningfulNarrative(value, { minLength = 20 } = {}) {
-  const trimmed = requireNonEmptyString(value, 'narrative');
+function requireMeaningfulNarrative(value, { minLength = 20, fieldName = 'narrative' } = {}) {
+  const trimmed = requireNonEmptyString(value, fieldName);
   if (trimmed.length < minLength) {
     throw new ValidationError(
-      `narrative is too short to describe a case (minimum ${minLength} characters).`
+      `${fieldName} is too short to describe a case (minimum ${minLength} characters).`
     );
   }
   return trimmed;

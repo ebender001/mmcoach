@@ -95,6 +95,25 @@ enum BackendService {
         try await run(GetCaseFunction(caseId: caseId))
     }
 
+    /// Overwrites the polished narrative on an already-finalized case.
+    /// Only valid once the case is `completed` -- the backend rejects it
+    /// otherwise via `BackendError.invalidState`.
+    static func updatePolishedNarrative(caseId: String, polishedNarrative: String) async throws -> MMCase {
+        try await run(UpdatePolishedNarrativeFunction(caseId: caseId, polishedNarrative: polishedNarrative))
+    }
+
+    /// Live PubMed lookup for one reference topic -- not persisted to the
+    /// case; the trainee reviews and picks their own sources rather than
+    /// the app silently attaching one. `searchIntent` and `caseId` are
+    /// both optional but should be passed whenever known: the backend
+    /// uses `searchIntent` to craft a more targeted PubMed query, and
+    /// `caseId` to verify ownership and roll this call's AI cost into
+    /// that case's running total. Returns up to 5 results ordered by
+    /// PubMed's own relevance ranking, or an empty array if nothing matched.
+    static func findReferences(topic: String, searchIntent: String? = nil, caseId: String? = nil) async throws -> [PubMedReference] {
+        try await run(FindReferencesFunction(topic: topic, searchIntent: searchIntent, caseId: caseId)).results
+    }
+
     /// Corrects one freshly-dictated narrative segment. `priorNarrative` is
     /// passed only as context for disambiguation -- the backend does not
     /// re-edit it, and only `correctedSegment` should be appended locally.
@@ -148,6 +167,21 @@ private struct GetCaseFunction: ParseCloudable {
     typealias ReturnType = MMCase
     var functionJobName = "mmGetCase"
     var caseId: String
+}
+
+private struct UpdatePolishedNarrativeFunction: ParseCloudable {
+    typealias ReturnType = MMCase
+    var functionJobName = "mmUpdatePolishedNarrative"
+    var caseId: String
+    var polishedNarrative: String
+}
+
+private struct FindReferencesFunction: ParseCloudable {
+    typealias ReturnType = PubMedReferenceSearch
+    var functionJobName = "mmFindReferences"
+    var topic: String
+    var searchIntent: String?
+    var caseId: String?
 }
 
 private struct CorrectDictationFunction: ParseCloudable {

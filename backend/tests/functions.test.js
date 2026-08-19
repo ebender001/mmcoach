@@ -4,8 +4,12 @@ const { Parse, cloudRegistry } = createFakeParse();
 global.Parse = Parse;
 
 jest.mock('../cloud/services/caseService');
+jest.mock('../cloud/services/pubmedService');
+jest.mock('../cloud/ai/referenceQueryBuilder');
 jest.mock('../cloud/ai/dictationCorrector');
 const caseService = require('../cloud/services/caseService');
+const pubmedService = require('../cloud/services/pubmedService');
+const referenceQueryBuilder = require('../cloud/ai/referenceQueryBuilder');
 const dictationCorrector = require('../cloud/ai/dictationCorrector');
 const { NotFoundError, InvalidStateError } = require('../cloud/utils/errors');
 
@@ -13,7 +17,9 @@ require('../cloud/functions/createCase');
 require('../cloud/functions/answerQuestion');
 require('../cloud/functions/finalizeCase');
 require('../cloud/functions/getCase');
+require('../cloud/functions/updatePolishedNarrative');
 require('../cloud/functions/getCaseAICost');
+require('../cloud/functions/findReferences');
 require('../cloud/functions/correctDictation');
 
 afterEach(() => jest.clearAllMocks());
@@ -194,6 +200,64 @@ describe('mmGetCase', () => {
   });
 });
 
+describe('mmUpdatePolishedNarrative', () => {
+  it('rejects an unauthenticated request without calling the service', async () => {
+    await expect(
+      cloudRegistry.mmUpdatePolishedNarrative({ params: { caseId: 'abc123', polishedNarrative: 'Edited narrative text.' } })
+    ).rejects.toMatchObject({ code: Parse.Error.INVALID_SESSION_TOKEN });
+    expect(caseService.updatePolishedNarrative).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing polishedNarrative', async () => {
+    await expect(
+      cloudRegistry.mmUpdatePolishedNarrative({ params: { caseId: 'abc123' }, user: AUTH_USER })
+    ).rejects.toThrow();
+    expect(caseService.updatePolishedNarrative).not.toHaveBeenCalled();
+  });
+
+  it('rejects a narrative that is too short', async () => {
+    await expect(
+      cloudRegistry.mmUpdatePolishedNarrative({ params: { caseId: 'abc123', polishedNarrative: 'too short' }, user: AUTH_USER })
+    ).rejects.toThrow();
+    expect(caseService.updatePolishedNarrative).not.toHaveBeenCalled();
+  });
+
+  it('propagates an invalid-state error when the case is not yet finalized', async () => {
+    caseService.updatePolishedNarrative.mockRejectedValue(new InvalidStateError('This case has not been finalized yet.'));
+
+    await expect(
+      cloudRegistry.mmUpdatePolishedNarrative({
+        params: { caseId: 'abc123', polishedNarrative: 'Edited narrative text.' },
+        user: AUTH_USER,
+      })
+    ).rejects.toMatchObject({ code: Parse.Error.OPERATION_FORBIDDEN });
+  });
+
+  it('saves the edited narrative and returns the finalized response shape', async () => {
+    caseService.updatePolishedNarrative.mockResolvedValue({ objectId: 'abc123', status: 'completed' });
+    caseService.formatFinalizedCase.mockReturnValue({
+      caseId: 'abc123',
+      status: 'completed',
+      polishedNarrative: 'Edited narrative text.',
+      discussionPreparation: [],
+      likelyFacultyQuestions: [],
+      references: [],
+    });
+
+    const result = await cloudRegistry.mmUpdatePolishedNarrative({
+      params: { caseId: 'abc123', polishedNarrative: 'Edited narrative text.' },
+      user: AUTH_USER,
+    });
+
+    expect(caseService.updatePolishedNarrative).toHaveBeenCalledWith({
+      caseId: 'abc123',
+      ownerId: 'user1',
+      polishedNarrative: 'Edited narrative text.',
+    });
+    expect(result.polishedNarrative).toBe('Edited narrative text.');
+  });
+});
+
 describe('mmGetCaseAICost', () => {
   it('rejects an unauthenticated request without calling the service', async () => {
     await expect(
@@ -228,6 +292,113 @@ describe('mmGetCaseAICost', () => {
     expect(caseService.getCaseAICost).toHaveBeenCalledWith({ caseId: 'abc123', ownerId: 'user1' });
     expect(result.totalCostUSD).toBe(0.0234);
     expect(result.calls).toHaveLength(1);
+  });
+});
+
+describe('mmFindReferences', () => {
+  const AI_QUERY_META = { model: 'gpt-4o', latencyMs: 5, usage: { total_tokens: 40 } };
+
+  it('rejects an unauthenticated request without calling the service', async () => {
+    await expect(
+      cloudRegistry.mmFindReferences({ params: { topic: 'Postoperative bleeding' } })
+    ).rejects.toMatchObject({ code: Parse.Error.INVALID_SESSION_TOKEN });
+    expect(pubmedService.findReferences).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing topic', async () => {
+    await expect(cloudRegistry.mmFindReferences({ params: {}, user: AUTH_USER })).rejects.toThrow();
+    expect(pubmedService.findReferences).not.toHaveBeenCalled();
+  });
+
+  it('searches PubMed using the AI-crafted query, not the raw topic', async () => {
+    referenceQueryBuilder.buildQuery.mockResolvedValue({
+      query: '(postoperative hemorrhage[mesh]) AND (cardiac surgical procedures[mesh])',
+      meta: AI_QUERY_META,
+    });
+    pubmedService.findReferences.mockResolvedValue([
+      { pmid: '111', title: 'A relevant paper', authors: ['Smith J'], journal: 'J Surg', year: '2020', abstractSections: [{ label: null, text: 'Abstract text.' }], url: 'https://pubmed.ncbi.nlm.nih.gov/111/' },
+    ]);
+
+    const result = await cloudRegistry.mmFindReferences({
+      params: { topic: 'Postoperative bleeding after cardiac surgery', searchIntent: 'Guidelines on re-exploration timing.' },
+      user: AUTH_USER,
+    });
+
+    expect(referenceQueryBuilder.buildQuery).toHaveBeenCalledWith({
+      topic: 'Postoperative bleeding after cardiac surgery',
+      searchIntent: 'Guidelines on re-exploration timing.',
+    });
+    expect(pubmedService.findReferences).toHaveBeenCalledWith({
+      query: '(postoperative hemorrhage[mesh]) AND (cardiac surgical procedures[mesh])',
+      maxResults: 5,
+    });
+    expect(result.topic).toBe('Postoperative bleeding after cardiac surgery');
+    expect(result.results).toHaveLength(1);
+  });
+
+  it('falls back to the plain topic when the AI-crafted query returns nothing', async () => {
+    referenceQueryBuilder.buildQuery.mockResolvedValue({
+      query: '(overly narrow query[mesh]) AND (too specific[tiab])',
+      meta: AI_QUERY_META,
+    });
+    pubmedService.findReferences
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { pmid: '222', title: 'Fallback result', authors: [], journal: null, year: null, abstractSections: [], url: 'https://pubmed.ncbi.nlm.nih.gov/222/' },
+      ]);
+
+    const result = await cloudRegistry.mmFindReferences({
+      params: { topic: 'Postoperative bleeding' },
+      user: AUTH_USER,
+    });
+
+    expect(pubmedService.findReferences).toHaveBeenNthCalledWith(1, {
+      query: '(overly narrow query[mesh]) AND (too specific[tiab])',
+      maxResults: 5,
+    });
+    expect(pubmedService.findReferences).toHaveBeenNthCalledWith(2, { query: 'Postoperative bleeding', maxResults: 5 });
+    expect(result.results).toHaveLength(1);
+  });
+
+  it('verifies case ownership and records AI usage when caseId is provided', async () => {
+    referenceQueryBuilder.buildQuery.mockResolvedValue({
+      query: 'postoperative bleeding[tiab]',
+      meta: AI_QUERY_META,
+    });
+    pubmedService.findReferences.mockResolvedValue([]);
+    caseService.getCase.mockResolvedValue({ objectId: 'case1', ownerId: 'user1' });
+
+    await cloudRegistry.mmFindReferences({
+      params: { topic: 'Postoperative bleeding', caseId: 'case1' },
+      user: AUTH_USER,
+    });
+
+    expect(caseService.getCase).toHaveBeenCalledWith({ caseId: 'case1', ownerId: 'user1' });
+    expect(caseService.recordAIUsage).toHaveBeenCalledWith({
+      caseId: 'case1',
+      ownerId: 'user1',
+      operation: 'buildReferenceQuery',
+      meta: AI_QUERY_META,
+    });
+  });
+
+  it('propagates NotFoundError when caseId does not belong to the caller', async () => {
+    caseService.getCase.mockRejectedValue(new NotFoundError('No case found with id case1.'));
+
+    await expect(
+      cloudRegistry.mmFindReferences({ params: { topic: 'Postoperative bleeding', caseId: 'case1' }, user: AUTH_USER })
+    ).rejects.toMatchObject({ code: Parse.Error.OBJECT_NOT_FOUND });
+    expect(referenceQueryBuilder.buildQuery).not.toHaveBeenCalled();
+  });
+
+  it('propagates a PubMed failure as an internal-server-error Parse error', async () => {
+    const { ExternalServiceError } = require('../cloud/utils/errors');
+    referenceQueryBuilder.buildQuery.mockResolvedValue({ query: 'Postoperative bleeding', meta: AI_QUERY_META });
+    pubmedService.findReferences.mockRejectedValue(new ExternalServiceError('Failed to reach PubMed.'));
+
+    await expect(
+      cloudRegistry.mmFindReferences({ params: { topic: 'Postoperative bleeding' }, user: AUTH_USER })
+    ).rejects.toMatchObject({ code: Parse.Error.INTERNAL_SERVER_ERROR });
   });
 });
 

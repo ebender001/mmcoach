@@ -58,20 +58,25 @@ backend/
 │   │   ├── answerQuestion.js          # mmAnswerQuestion
 │   │   ├── finalizeCase.js            # mmFinalizeCase
 │   │   ├── getCase.js                 # mmGetCase
-│   │   └── getCaseAICost.js           # mmGetCaseAICost
+│   │   ├── updatePolishedNarrative.js # mmUpdatePolishedNarrative
+│   │   ├── getCaseAICost.js           # mmGetCaseAICost
+│   │   └── findReferences.js          # mmFindReferences
 │   ├── services/
 │   │   ├── caseService.js             # workflow orchestration
 │   │   ├── aiService.js               # OpenAI HTTP call, retries, timeout, JSON parsing
-│   │   └── referenceService.js        # reference-topic -> pending-reference shape
+│   │   ├── referenceService.js        # reference-topic -> pending-reference shape
+│   │   └── pubmedService.js           # NCBI E-utilities search + MEDLINE parsing
 │   ├── ai/
 │   │   ├── caseAnalyzer.js            # narrative -> extractedCase; answer -> updated extractedCase
 │   │   ├── questionGenerator.js       # decides the single next question, or none
-│   │   └── finalizer.js               # polished narrative, discussion prep, faculty Qs, reference topics
+│   │   ├── finalizer.js               # polished narrative, discussion prep, faculty Qs, reference topics
+│   │   └── referenceQueryBuilder.js   # topic + searchIntent -> one well-formed PubMed query
 │   ├── prompts/
 │   │   ├── persona.js                 # shared "surgical educator" persona text
 │   │   ├── analyzeCasePrompt.js
 │   │   ├── nextQuestionPrompt.js
-│   │   └── finalizeCasePrompt.js
+│   │   ├── finalizeCasePrompt.js
+│   │   └── referenceQueryPrompt.js
 │   ├── schemas/
 │   │   ├── caseStatus.js              # the 3 status values, centralized
 │   │   ├── extractedCaseSchema.js     # known extractedCase field names + sanitizer
@@ -105,6 +110,7 @@ backend/
 | Cloud Function parameters/validation    | `functions/*.js`, `utils/validation.js` |
 | Model name / timeouts / retries         | `config/aiConfig.js`              |
 | AI cost pricing / which models are priced | `config/aiPricing.js`           |
+| How a reference topic becomes a PubMed query | `ai/referenceQueryBuilder.js`, `prompts/referenceQueryPrompt.js` |
 | How AI cost is recorded per case        | `repositories/aiCostRepository.js`, `services/caseService.js#recordAIUsage` |
 | Case status values                      | `schemas/caseStatus.js`           |
 | What an AI JSON response must contain   | `schemas/aiResponseSchemas.js`    |
@@ -126,6 +132,8 @@ This project uses the classic Back4App Cloud Code layout (`cloud/`,
    | `OPENAI_MODEL`        | no       | `gpt-4o`  | Chat Completions model used for all AI calls. |
    | `OPENAI_TIMEOUT_MS`   | no       | `30000`        | Per-request timeout to the AI provider. |
    | `OPENAI_MAX_RETRIES`  | no       | `2`            | Retries on 429/5xx or transport errors. |
+   | `PUBMED_API_KEY`      | no       | (none)         | NCBI E-utilities API key -- raises the rate limit from 3 to 10 requests/sec. Not required for MMCoach's usage pattern (one search per reference lookup). |
+   | `PUBMED_CONTACT_EMAIL`| no       | (none)         | Sent as courtesy identification (`tool`/`email` params) per NCBI's usage guidelines. Omitted entirely if not set -- never fabricated. |
 
    See `.env.example` for a local-reference copy of these names (Back4App
    does not read that file; it's documentation only).
@@ -403,6 +411,20 @@ extractedCase, conversation history, currentQuestion/nextQuestion,
 finalized materials once present, promptVersion, aiModel, timestamps). Raw
 AI provider responses are never included.
 
+### `mmUpdatePolishedNarrative`
+
+**Params:** `{ caseId: string, polishedNarrative: string }` (same
+non-empty/reasonable-length check as `mmCreateCase`'s narrative).
+
+**Behavior:** overwrites the polished narrative on an already-`completed`
+case -- lets the trainee hand-fix a phrasing issue after finalization.
+Rejected (`OPERATION_FORBIDDEN`) if the case isn't `completed` yet.
+Does **not** regenerate `discussionPreparation`/`likelyFacultyQuestions`/
+`references` -- those still reflect the AI's original version of the
+narrative.
+
+**Response:** same shape as `mmFinalizeCase`.
+
 ### `mmGetCaseAICost`
 
 **Params:** `{ caseId: string }`.
@@ -433,6 +455,57 @@ individually recorded AI call. See "AI cost tracking" above.
 }
 ```
 
+### `mmFindReferences`
+
+**Params:** `{ topic: string, searchIntent?: string, caseId?: string }`.
+`caseId` is optional but the iOS client always sends it: when present,
+it's used to verify the caller owns that case (same `OBJECT_NOT_FOUND`
+behavior as every other case-scoped function) and to roll this call's AI
+cost into that case's running total (see "AI cost tracking"). This
+function reads a case only to check ownership -- it never writes
+anything onto one.
+
+**Behavior:** first asks the AI to translate `topic` + `searchIntent`
+into one well-formed PubMed query (`ai/referenceQueryBuilder.js` --
+MeSH headings and title/abstract keywords, boolean AND across 2-4
+concepts, biased toward reviews/guidelines over case reports) rather
+than sending the raw topic phrase straight to PubMed's own automatic
+term mapping. Then searches PubMed with that query (NCBI E-utilities:
+`esearch` for the top-5 most relevant PMIDs, `efetch` in MEDLINE format
+for title/authors/journal/year/abstract -- see `services/pubmedService.js`).
+If the AI-crafted query returns nothing (it can occasionally
+over-constrain), retries once with the plain `topic` before giving up.
+`results` is `[]` if nothing matches either way, and no citation is ever
+fabricated. Each result's abstract is split into `{ label, text }`
+sections wherever the source has NLM's structured-abstract labels
+(Background/Methods/Results/Conclusions, etc. -- see
+`pubmedService.js#splitAbstractSections`); an unstructured abstract comes
+back as a single section with `label: null`.
+
+**Response:**
+
+```json
+{
+  "topic": "Postoperative bleeding after cardiac surgery",
+  "results": [
+    {
+      "pmid": "12345678",
+      "title": "Timing of surgical re-exploration after cardiac surgery",
+      "authors": ["Smith J", "Doe A"],
+      "journal": "J Thorac Cardiovasc Surg",
+      "year": "2019",
+      "abstractSections": [
+        { "label": "Background", "text": "..." },
+        { "label": "Methods", "text": "..." },
+        { "label": "Results", "text": "..." },
+        { "label": "Conclusions", "text": "..." }
+      ],
+      "url": "https://pubmed.ncbi.nlm.nih.gov/12345678/"
+    }
+  ]
+}
+```
+
 ### Errors
 
 All functions reject with a `Parse.Error` (no stack traces, no internal
@@ -444,7 +517,7 @@ details):
 | Missing/empty/too-short input                 | `VALIDATION_ERROR` |
 | Case not found, malformed caseId, **or case belongs to a different user** | `OBJECT_NOT_FOUND` |
 | Stale question, already-completed, still collecting | `OPERATION_FORBIDDEN` |
-| AI provider or AI response problem            | `INTERNAL_SERVER_ERROR` |
+| AI provider/response problem, or PubMed unreachable/unparseable | `INTERNAL_SERVER_ERROR` |
 
 A case owned by another user is reported identically to a case that
 doesn't exist (`OBJECT_NOT_FOUND`) -- a valid caseId alone must never
@@ -488,13 +561,21 @@ can be evaluated later.
 - `prompts/nextQuestionPrompt.js` -- next-question decision.
 - `prompts/finalizeCasePrompt.js` -- final presentation materials.
 
-### References (future work)
+### References
 
 `services/referenceService.js` converts AI-identified reference *topics*
-into pending reference entries (`citation: null, verified: false`). Actual
-literature retrieval/verification (e.g. PubMed) is intentionally not
-implemented in this MVP -- `retrieveAndVerifyReferences()` is a documented
-no-op placeholder so that feature has an obvious home later.
+into pending reference entries (`citation: null, verified: false`) at
+finalize time. That part is still deliberately unverified/unfetched --
+`retrieveAndVerifyReferences()` remains a no-op placeholder, since
+auto-populating a citation without the trainee seeing/choosing it risks
+presenting an AI-selected source as authoritative.
+
+What *is* implemented: an **on-demand** PubMed lookup per topic
+(`mmFindReferences`, see above) -- tapping a reference card in the iOS
+app searches PubMed live for that topic and shows candidate articles
+with abstracts, so the trainee reviews and picks their own sources rather
+than the app silently attaching one. This is intentionally a read-only
+lookup: results aren't written back onto `MMCase.references`.
 
 ---
 

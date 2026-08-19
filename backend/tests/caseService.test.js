@@ -243,6 +243,43 @@ describe('getCase', () => {
   });
 });
 
+describe('updatePolishedNarrative', () => {
+  it('throws NotFoundError when the case belongs to a different user', async () => {
+    caseRepository.getById.mockResolvedValue(
+      baseCaseState({ status: CaseStatus.COMPLETED, ownerId: 'someone-else' })
+    );
+
+    await expect(
+      caseService.updatePolishedNarrative({ caseId: 'case1', ownerId: 'user1', polishedNarrative: 'Edited narrative text.' })
+    ).rejects.toThrow(NotFoundError);
+    expect(caseRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('throws InvalidStateError when the case has not been finalized yet', async () => {
+    caseRepository.getById.mockResolvedValue(baseCaseState({ status: CaseStatus.READY_TO_FINALIZE }));
+
+    await expect(
+      caseService.updatePolishedNarrative({ caseId: 'case1', ownerId: 'user1', polishedNarrative: 'Edited narrative text.' })
+    ).rejects.toThrow(InvalidStateError);
+    expect(caseRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('persists the edited narrative for a completed case', async () => {
+    const current = baseCaseState({ status: CaseStatus.COMPLETED, polishedNarrative: 'Original narrative.' });
+    caseRepository.getById.mockResolvedValue(current);
+    caseRepository.update.mockImplementation(async (id, patch) => ({ ...current, ...patch }));
+
+    const result = await caseService.updatePolishedNarrative({
+      caseId: 'case1',
+      ownerId: 'user1',
+      polishedNarrative: 'Edited narrative text.',
+    });
+
+    expect(caseRepository.update).toHaveBeenCalledWith('case1', { polishedNarrative: 'Edited narrative text.' });
+    expect(result.polishedNarrative).toBe('Edited narrative text.');
+  });
+});
+
 describe('AI cost tracking', () => {
   it('records usage for both AI calls made during createCase and rolls them into the case total', async () => {
     caseAnalyzer.analyzeInitialNarrative.mockResolvedValue({

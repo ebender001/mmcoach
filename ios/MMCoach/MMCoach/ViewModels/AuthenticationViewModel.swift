@@ -57,10 +57,10 @@ final class AuthenticationViewModel: ObservableObject {
     private let appleSignIn: AppleSignInCredentialExtracting
     private var sessionExpiryObservation: AnyCancellable?
 
-    init(authService: AuthenticationService = ParseAuthenticationService(),
-         appleSignIn: AppleSignInCredentialExtracting = AppleSignInService()) {
-        self.authService = authService
-        self.appleSignIn = appleSignIn
+    init(authService: AuthenticationService? = nil,
+         appleSignIn: AppleSignInCredentialExtracting? = nil) {
+        self.authService = authService ?? ParseAuthenticationService()
+        self.appleSignIn = appleSignIn ?? AppleSignInService()
         sessionExpiryObservation = NotificationCenter.default
             .publisher(for: .mmSessionExpired)
             .receive(on: DispatchQueue.main)

@@ -54,6 +54,14 @@ class AIResponseError extends AppError {
   }
 }
 
+/** A non-AI external provider (e.g. PubMed) failed or returned something unusable. */
+class ExternalServiceError extends AppError {
+  constructor(message) {
+    super(message, 'EXTERNAL_SERVICE_ERROR');
+    this.name = 'ExternalServiceError';
+  }
+}
+
 /**
  * Maps an AppError (or unknown error) to a Parse.Error so Cloud Functions
  * never leak internal messages/stack traces to the client. Reads the global
@@ -76,7 +84,7 @@ function toParseError(err) {
   if (err instanceof AuthenticationError) {
     return new Parse.Error(Parse.Error.INVALID_SESSION_TOKEN, err.message);
   }
-  if (err instanceof AIProviderError || err instanceof AIResponseError) {
+  if (err instanceof AIProviderError || err instanceof AIResponseError || err instanceof ExternalServiceError) {
     return new Parse.Error(Parse.Error.INTERNAL_SERVER_ERROR, err.message);
   }
   if (err instanceof AppError) {
@@ -94,5 +102,6 @@ module.exports = {
   AuthenticationError,
   AIProviderError,
   AIResponseError,
+  ExternalServiceError,
   toParseError,
 };

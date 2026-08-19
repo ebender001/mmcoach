@@ -16,6 +16,7 @@ final class CaseSummaryViewModel: ObservableObject {
     @Published private(set) var references: [ReferenceItem]
     @Published private(set) var isLoading: Bool
     @Published var errorMessage: String?
+    @Published private(set) var isSavingNarrative = false
 
     /// - Parameter initialCase: Pass the case snapshot already returned by
     ///   mmFinalizeCase when navigating here right after finalizing, so no
@@ -42,5 +43,26 @@ final class CaseSummaryViewModel: ObservableObject {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? "Something went wrong. Please try again."
         }
         isLoading = false
+    }
+
+    /// Persists a hand-edited polished narrative. Returns whether it
+    /// succeeded; on success `polishedNarrative` already reflects the
+    /// edit, on failure `errorMessage` is set and the caller should keep
+    /// its editing UI open so the trainee doesn't lose the edit.
+    @discardableResult
+    func updatePolishedNarrative(_ text: String) async -> Bool {
+        guard !isSavingNarrative else { return false }
+        errorMessage = nil
+        isSavingNarrative = true
+        defer { isSavingNarrative = false }
+
+        do {
+            let result = try await BackendService.updatePolishedNarrative(caseId: caseId, polishedNarrative: text)
+            polishedNarrative = result.polishedNarrative ?? text
+            return true
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? "Something went wrong. Please try again."
+            return false
+        }
     }
 }

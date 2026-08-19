@@ -70,13 +70,17 @@ struct CaseSummaryView: View {
     private var sectionContent: some View {
         switch selectedSection {
         case .polishedCase:
-            PolishedCaseView(narrative: viewModel.polishedNarrative)
+            PolishedCaseView(
+                narrative: viewModel.polishedNarrative,
+                isSaving: viewModel.isSavingNarrative,
+                onSave: { await viewModel.updatePolishedNarrative($0) }
+            )
         case .prepare:
             DiscussionPrepView(topics: viewModel.discussionPreparation)
         case .questions:
             FacultyQuestionsView(questions: viewModel.likelyFacultyQuestions)
         case .references:
-            ReferencesView(references: viewModel.references)
+            ReferencesView(references: viewModel.references, caseId: viewModel.caseId)
         }
     }
 }

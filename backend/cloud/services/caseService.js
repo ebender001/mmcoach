@@ -214,6 +214,23 @@ async function getCase({ caseId, ownerId }) {
   return getOwnedCase(caseId, ownerId);
 }
 
+/**
+ * Lets the trainee hand-edit the polished narrative after finalization --
+ * e.g. to fix a phrasing the AI got slightly wrong before presenting.
+ * Only valid once a case is `completed` (there's nothing to edit before
+ * `mmFinalizeCase` has produced a polishedNarrative), and does not touch
+ * discussionPreparation/likelyFacultyQuestions/references -- those were
+ * generated from the AI's version and would need regenerating to reflect
+ * hand edits, which is out of scope for a text fix.
+ */
+async function updatePolishedNarrative({ caseId, ownerId, polishedNarrative }) {
+  const caseState = await getOwnedCase(caseId, ownerId);
+  if (caseState.status !== CaseStatus.COMPLETED) {
+    throw new InvalidStateError('This case has not been finalized yet.');
+  }
+  return caseRepository.update(caseId, { polishedNarrative });
+}
+
 /** Per-case AI cost: the running total plus every individual call. */
 async function getCaseAICost({ caseId, ownerId }) {
   const caseState = await getOwnedCase(caseId, ownerId);
@@ -273,7 +290,9 @@ module.exports = {
   answerQuestion,
   finalizeCase,
   getCase,
+  updatePolishedNarrative,
   getCaseAICost,
+  recordAIUsage,
   formatCaseSummary,
   formatFinalizedCase,
   formatFullCase,

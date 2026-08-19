@@ -98,21 +98,13 @@ struct NewCaseView: View {
         )
     }
 
-    /// A single flowing sentence (built via `Text` concatenation rather
-    /// than separate `Text`/`Image` views) so it wraps naturally as one
-    /// paragraph on narrow screens instead of breaking mid-phrase.
+    /// A single flowing sentence so it wraps naturally as one paragraph on narrow screens.
     private var inputModeHint: some View {
-        (
-            Text(Image(systemName: "mic.fill")).foregroundStyle(Color.mutedTeal)
-            + Text(" Dictate").foregroundStyle(.primary)
-            + Text(" or ").foregroundStyle(Color.slateText)
-            + Text(Image(systemName: "keyboard")).foregroundStyle(Color.mutedTeal)
-            + Text(" type").foregroundStyle(.primary)
-            + Text(" — whichever is easier.").foregroundStyle(Color.slateText)
-        )
-        .font(.footnote.weight(.medium))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("You can dictate or type the case summary, whichever is easier.")
+        Text("\(Image(systemName: "mic.fill")) Dictate or \(Image(systemName: "keyboard")) type -- whichever is easier.")
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(Color.slateText)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("You can dictate or type the case summary, whichever is easier.")
     }
 
     private var continueFooter: some View {

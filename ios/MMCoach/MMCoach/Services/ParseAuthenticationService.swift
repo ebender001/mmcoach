@@ -127,7 +127,7 @@ struct ParseAuthenticationService: AuthenticationService {
 }
 
 private extension AuthenticatedUser {
-    init(parseUser: User) {
+    nonisolated init(parseUser: User) {
         self.init(
             id: parseUser.objectId ?? "",
             email: parseUser.email,

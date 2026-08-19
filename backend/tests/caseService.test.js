@@ -1,9 +1,11 @@
 jest.mock('../cloud/repositories/caseRepository');
+jest.mock('../cloud/repositories/aiCostRepository');
 jest.mock('../cloud/ai/caseAnalyzer');
 jest.mock('../cloud/ai/questionGenerator');
 jest.mock('../cloud/ai/finalizer');
 
 const caseRepository = require('../cloud/repositories/caseRepository');
+const aiCostRepository = require('../cloud/repositories/aiCostRepository');
 const caseAnalyzer = require('../cloud/ai/caseAnalyzer');
 const questionGenerator = require('../cloud/ai/questionGenerator');
 const finalizer = require('../cloud/ai/finalizer');
@@ -238,6 +240,103 @@ describe('getCase', () => {
     const result = await caseService.getCase({ caseId: 'case1', ownerId: 'user1' });
 
     expect(result.objectId).toBe('case1');
+  });
+});
+
+describe('AI cost tracking', () => {
+  it('records usage for both AI calls made during createCase and rolls them into the case total', async () => {
+    caseAnalyzer.analyzeInitialNarrative.mockResolvedValue({
+      extractedCase: { procedure: 'CABG x3' },
+      meta: { model: 'gpt-4o', usage: { prompt_tokens: 200, completion_tokens: 50, total_tokens: 250 } },
+      promptVersion: '1.0.0',
+    });
+    const created = baseCaseState({ currentQuestion: null });
+    caseRepository.create.mockResolvedValue(created);
+    questionGenerator.generateNextQuestion.mockResolvedValue({
+      needsQuestion: false,
+      question: null,
+      meta: { model: 'gpt-4o', usage: { prompt_tokens: 80, completion_tokens: 20, total_tokens: 100 } },
+      promptVersion: '1.0.0',
+    });
+    caseRepository.update.mockImplementation(async (id, patch) => ({ ...created, ...patch }));
+    aiCostRepository.record.mockResolvedValue({ costUSD: 0.001, totalTokens: 250 });
+
+    await caseService.createCase({ narrative: 'A 68 year old man...', ownerId: 'user1' });
+
+    expect(aiCostRepository.record).toHaveBeenCalledWith(
+      expect.objectContaining({ caseId: 'case1', ownerId: 'user1', operation: 'analyzeInitialNarrative' })
+    );
+    expect(aiCostRepository.record).toHaveBeenCalledWith(
+      expect.objectContaining({ caseId: 'case1', ownerId: 'user1', operation: 'generateNextQuestion' })
+    );
+    expect(caseRepository.incrementAIUsage).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not skip recording -- but a recording failure never breaks the case workflow', async () => {
+    caseAnalyzer.analyzeInitialNarrative.mockResolvedValue({
+      extractedCase: { procedure: 'CABG x3' },
+      meta: { model: 'gpt-4o', usage: { prompt_tokens: 200, completion_tokens: 50, total_tokens: 250 } },
+      promptVersion: '1.0.0',
+    });
+    const created = baseCaseState({ currentQuestion: null });
+    caseRepository.create.mockResolvedValue(created);
+    questionGenerator.generateNextQuestion.mockResolvedValue({
+      needsQuestion: false,
+      question: null,
+      meta: { model: 'gpt-4o', usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } },
+      promptVersion: '1.0.0',
+    });
+    caseRepository.update.mockImplementation(async (id, patch) => ({ ...created, ...patch }));
+    aiCostRepository.record.mockRejectedValue(new Error('cost table unavailable'));
+
+    const result = await caseService.createCase({ narrative: 'A 68 year old man...', ownerId: 'user1' });
+
+    expect(result.status).toBe(CaseStatus.READY_TO_FINALIZE);
+  });
+
+  it('skips recording entirely when the AI call meta has no usage', async () => {
+    caseAnalyzer.analyzeInitialNarrative.mockResolvedValue({
+      extractedCase: { procedure: 'CABG x3' },
+      meta: { model: 'gpt-4o' },
+      promptVersion: '1.0.0',
+    });
+    const created = baseCaseState({ currentQuestion: null });
+    caseRepository.create.mockResolvedValue(created);
+    questionGenerator.generateNextQuestion.mockResolvedValue({
+      needsQuestion: false,
+      question: null,
+      meta: { model: 'gpt-4o' },
+      promptVersion: '1.0.0',
+    });
+    caseRepository.update.mockImplementation(async (id, patch) => ({ ...created, ...patch }));
+
+    await caseService.createCase({ narrative: 'A 68 year old man...', ownerId: 'user1' });
+
+    expect(aiCostRepository.record).not.toHaveBeenCalled();
+    expect(caseRepository.incrementAIUsage).not.toHaveBeenCalled();
+  });
+});
+
+describe('getCaseAICost', () => {
+  it('throws NotFoundError when the case belongs to a different user', async () => {
+    caseRepository.getById.mockResolvedValue(baseCaseState({ ownerId: 'someone-else' }));
+
+    await expect(caseService.getCaseAICost({ caseId: 'case1', ownerId: 'user1' })).rejects.toThrow(NotFoundError);
+    expect(aiCostRepository.listForCase).not.toHaveBeenCalled();
+  });
+
+  it('returns the running total plus the individual recorded calls', async () => {
+    caseRepository.getById.mockResolvedValue(baseCaseState({ aiCostUSD: 0.0234, aiTotalTokens: 900 }));
+    aiCostRepository.listForCase.mockResolvedValue([
+      { objectId: 'ac1', operation: 'analyzeInitialNarrative', model: 'gpt-4o', costUSD: 0.01, totalTokens: 500 },
+      { objectId: 'ac2', operation: 'generateNextQuestion', model: 'gpt-4o', costUSD: 0.0134, totalTokens: 400 },
+    ]);
+
+    const result = await caseService.getCaseAICost({ caseId: 'case1', ownerId: 'user1' });
+
+    expect(result.totalCostUSD).toBe(0.0234);
+    expect(result.totalTokens).toBe(900);
+    expect(result.calls).toHaveLength(2);
   });
 });
 

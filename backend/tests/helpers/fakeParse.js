@@ -1,7 +1,8 @@
 /**
- * Minimal in-memory fake of the pieces of the Parse SDK caseRepository.js
- * uses (Parse.Object.extend, Parse.Query#get, Parse.Error, Parse.Cloud).
- * Lets repository/function tests run without the real Parse SDK or network.
+ * Minimal in-memory fake of the pieces of the Parse SDK the repositories
+ * use (Parse.Object.extend, Parse.Query#get/#find, Parse.Error,
+ * Parse.Cloud, Parse.User/ACL pointers). Lets repository/function tests
+ * run without the real Parse SDK or network.
  */
 function createFakeParse() {
   const store = new Map();
@@ -22,7 +23,8 @@ function createFakeParse() {
   FakeParseError.INVALID_SESSION_TOKEN = 209;
 
   class FakeParseObject {
-    constructor() {
+    constructor(className) {
+      this.className = className;
       this.attributes = {};
       this.id = undefined;
       this.createdAt = undefined;
@@ -34,6 +36,10 @@ function createFakeParse() {
     }
     get(key) {
       return this.attributes[key];
+    }
+    /** Mirrors real Parse's atomic increment op -- see caseRepository#incrementAIUsage. */
+    increment(key, amount) {
+      this.attributes[key] = (this.attributes[key] || 0) + amount;
     }
     setACL(acl) {
       this.acl = acl;
@@ -50,7 +56,54 @@ function createFakeParse() {
     }
   }
 
+  // Minimal stand-in for a Parse pointer (e.g. Parse.User.createWithoutData,
+  // or Parse.Object.extend(X).createWithoutData) -- just enough identity
+  // (id + className) for repositories to attach/query relations without a
+  // real fetch.
+  class FakeParsePointer {
+    constructor(id, className) {
+      this.id = id;
+      this.className = className;
+    }
+  }
+
+  /**
+   * Real `Parse.Object.extend(className)` returns a distinct subclass per
+   * className; this fake mirrors that closely enough for tests to create
+   * objects/pointers of the right class and for queries to filter by it.
+   */
+  function extend(className) {
+    class ScopedParseObject extends FakeParseObject {
+      constructor() {
+        super(className);
+      }
+    }
+    ScopedParseObject.className = className;
+    ScopedParseObject.createWithoutData = (id) => new FakeParsePointer(id, className);
+    return ScopedParseObject;
+  }
+
+  function matchesValue(stored, queried) {
+    if (stored && typeof stored === 'object' && queried && typeof queried === 'object') {
+      return stored.id === queried.id;
+    }
+    return stored === queried;
+  }
+
   class FakeParseQuery {
+    constructor(ObjectClass) {
+      this.targetClassName = ObjectClass && ObjectClass.className;
+      this.conditions = [];
+      this.order = null;
+    }
+    equalTo(key, value) {
+      this.conditions.push({ key, value });
+      return this;
+    }
+    descending(key) {
+      this.order = { key, direction: -1 };
+      return this;
+    }
     async get(id) {
       const obj = store.get(id);
       if (!obj) {
@@ -58,14 +111,18 @@ function createFakeParse() {
       }
       return obj;
     }
-  }
-
-  // Minimal stand-in for a Parse.User pointer -- just enough for
-  // caseRepository to attach an `owner` pointer without a real Parse User.
-  class FakeParsePointer {
-    constructor(id) {
-      this.id = id;
-      this.className = '_User';
+    async find() {
+      let results = Array.from(store.values()).filter(
+        (obj) => obj.className === this.targetClassName
+      );
+      for (const { key, value } of this.conditions) {
+        results = results.filter((obj) => matchesValue(obj.get(key), value));
+      }
+      if (this.order) {
+        const { key, direction } = this.order;
+        results = [...results].sort((a, b) => (a[key] > b[key] ? 1 : a[key] < b[key] ? -1 : 0) * direction);
+      }
+      return results;
     }
   }
 
@@ -95,10 +152,10 @@ function createFakeParse() {
   const cloudRegistry = {};
 
   const Parse = {
-    Object: { extend: () => FakeParseObject },
+    Object: { extend },
     Query: FakeParseQuery,
     Error: FakeParseError,
-    User: { createWithoutData: (id) => new FakeParsePointer(id) },
+    User: { createWithoutData: (id) => new FakeParsePointer(id, '_User') },
     ACL: FakeParseACL,
     Cloud: {
       // The 3rd `options` arg (e.g. { requireUser: true }) mirrors real

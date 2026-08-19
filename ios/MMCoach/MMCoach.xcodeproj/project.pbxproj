@@ -271,6 +271,7 @@
 				DEVELOPMENT_TEAM = 33QTCM27D5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "M&M Coach";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MMCoach uses the microphone to let you dictate case narratives.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "MMCoach uses speech recognition to transcribe your dictated case narrative into text.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -306,6 +307,7 @@
 				DEVELOPMENT_TEAM = 33QTCM27D5;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "M&M Coach";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MMCoach uses the microphone to let you dictate case narratives.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "MMCoach uses speech recognition to transcribe your dictated case narrative into text.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

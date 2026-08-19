@@ -5,6 +5,7 @@
  * generation/finalization to ai/*, and persistence to caseRepository.
  */
 const caseRepository = require('../repositories/caseRepository');
+const aiCostRepository = require('../repositories/aiCostRepository');
 const caseAnalyzer = require('../ai/caseAnalyzer');
 const questionGenerator = require('../ai/questionGenerator');
 const finalizer = require('../ai/finalizer');
@@ -12,6 +13,30 @@ const { CaseStatus } = require('../schemas/caseStatus');
 const { NotFoundError, InvalidStateError } = require('../utils/errors');
 const { generateId } = require('../utils/idGenerator');
 const logger = require('../utils/logger');
+
+/**
+ * Records one AI provider call's cost/token usage against a case and
+ * rolls it into MMCase's running total. A no-op if `meta.usage` is
+ * missing (the provider didn't return one) -- callers still get their
+ * case update either way, cost tracking is never allowed to block or
+ * fail the actual workflow it's observing.
+ */
+async function recordAIUsage({ caseId, ownerId, operation, meta }) {
+  if (!meta || !meta.usage) return;
+  try {
+    const { costUSD, totalTokens } = await aiCostRepository.record({
+      caseId,
+      ownerId,
+      operation,
+      model: meta.model,
+      usage: meta.usage,
+      latencyMs: meta.latencyMs,
+    });
+    await caseRepository.incrementAIUsage(caseId, { costUSD, totalTokens });
+  } catch (err) {
+    logger.error({ module: 'caseService', operation: 'recordAIUsage', caseId, message: err.message });
+  }
+}
 
 /**
  * Fetches a case and confirms `ownerId` owns it, in one step. A case that
@@ -42,11 +67,17 @@ function toNextQuestion(currentQuestion) {
  * persists either a new currentQuestion (status stays collecting) or a
  * transition to ready_to_finalize.
  */
-async function applyQuestionOutcome(caseState) {
+async function applyQuestionOutcome(caseState, ownerId) {
   const questionResult = await questionGenerator.generateNextQuestion({
     extractedCase: caseState.extractedCase,
     conversation: caseState.conversation,
     caseId: caseState.objectId,
+  });
+  await recordAIUsage({
+    caseId: caseState.objectId,
+    ownerId,
+    operation: 'generateNextQuestion',
+    meta: questionResult.meta,
   });
 
   const promptVersion = {
@@ -106,8 +137,14 @@ async function createCase({ narrative, ownerId }) {
     promptVersion: { analyze: analysis.promptVersion },
     aiModel: analysis.meta.model,
   });
+  await recordAIUsage({
+    caseId: created.objectId,
+    ownerId,
+    operation: 'analyzeInitialNarrative',
+    meta: analysis.meta,
+  });
 
-  return applyQuestionOutcome(created);
+  return applyQuestionOutcome(created, ownerId);
 }
 
 async function answerQuestion({ caseId, questionId, answer, ownerId }) {
@@ -132,6 +169,7 @@ async function answerQuestion({ caseId, questionId, answer, ownerId }) {
     newEntry: answeredEntry,
     caseId,
   });
+  await recordAIUsage({ caseId, ownerId, operation: 'incorporateAnswer', meta: incorporation.meta });
 
   const updated = await caseRepository.update(caseId, {
     conversation,
@@ -141,7 +179,7 @@ async function answerQuestion({ caseId, questionId, answer, ownerId }) {
     aiModel: incorporation.meta.model,
   });
 
-  return applyQuestionOutcome(updated);
+  return applyQuestionOutcome(updated, ownerId);
 }
 
 async function finalizeCase({ caseId, ownerId }) {
@@ -159,6 +197,7 @@ async function finalizeCase({ caseId, ownerId }) {
     originalNarrative: caseState.originalNarrative,
     caseId,
   });
+  await recordAIUsage({ caseId, ownerId, operation: 'finalizeCase', meta: result.meta });
 
   return caseRepository.update(caseId, {
     status: CaseStatus.COMPLETED,
@@ -173,6 +212,18 @@ async function finalizeCase({ caseId, ownerId }) {
 
 async function getCase({ caseId, ownerId }) {
   return getOwnedCase(caseId, ownerId);
+}
+
+/** Per-case AI cost: the running total plus every individual call. */
+async function getCaseAICost({ caseId, ownerId }) {
+  const caseState = await getOwnedCase(caseId, ownerId);
+  const calls = await aiCostRepository.listForCase(caseId);
+  return {
+    caseId,
+    totalCostUSD: caseState.aiCostUSD,
+    totalTokens: caseState.aiTotalTokens,
+    calls,
+  };
 }
 
 /** Response shape for mmCreateCase / mmAnswerQuestion. */
@@ -222,6 +273,7 @@ module.exports = {
   answerQuestion,
   finalizeCase,
   getCase,
+  getCaseAICost,
   formatCaseSummary,
   formatFinalizedCase,
   formatFullCase,

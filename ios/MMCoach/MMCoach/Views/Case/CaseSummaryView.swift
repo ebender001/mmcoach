@@ -13,9 +13,11 @@ import SwiftUI
 struct CaseSummaryView: View {
     @StateObject private var viewModel: CaseSummaryViewModel
     @State private var selectedSection = Section.polishedCase
+    @Binding var path: [AppRoute]
 
-    init(viewModel: @autoclosure @escaping () -> CaseSummaryViewModel) {
+    init(viewModel: @autoclosure @escaping () -> CaseSummaryViewModel, path: Binding<[AppRoute]>) {
         _viewModel = StateObject(wrappedValue: viewModel())
+        _path = path
     }
 
     private enum Section: String, CaseIterable, Identifiable {
@@ -49,6 +51,18 @@ struct CaseSummaryView: View {
         }
         .navigationTitle("Prepared Case")
         .navigationBarTitleDisplayMode(.inline)
+        // This is a terminal screen -- stepping "back" into the interview
+        // that produced an already-finalized case isn't a meaningful
+        // action, so the only way out is the explicit Done button, which
+        // always returns straight to Home in one step regardless of how
+        // deep the stack was when this screen was reached (new-case flow
+        // vs. opening an already-completed case from Recent Cases).
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Done") { path = [] }
+            }
+        }
         .task { await viewModel.loadIfNeeded() }
     }
 
@@ -92,7 +106,8 @@ struct CaseSummaryView: View {
                                       verified: false)
                     ]
                 )
-            )
+            ),
+            path: .constant([])
         )
     }
 }

@@ -3,7 +3,7 @@
  *
  * Deliberately takes a fields object rather than free-form strings so log
  * lines stay greppable, e.g.:
- *   [MMCoach] function=mmAnswerQuestion caseId=abc123 operation=nextQuestion model=gpt-4o-mini latencyMs=1240
+ *   [MMCoach] function=mmAnswerQuestion caseId=abc123 operation=nextQuestion model=gpt-4o latencyMs=1240
  *
  * Never pass full narratives, answers, or AI-generated prose to this logger.
  */

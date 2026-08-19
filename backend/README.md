@@ -57,7 +57,8 @@ backend/
 │   │   ├── createCase.js              # mmCreateCase
 │   │   ├── answerQuestion.js          # mmAnswerQuestion
 │   │   ├── finalizeCase.js            # mmFinalizeCase
-│   │   └── getCase.js                 # mmGetCase
+│   │   ├── getCase.js                 # mmGetCase
+│   │   └── getCaseAICost.js           # mmGetCaseAICost
 │   ├── services/
 │   │   ├── caseService.js             # workflow orchestration
 │   │   ├── aiService.js               # OpenAI HTTP call, retries, timeout, JSON parsing
@@ -76,14 +77,16 @@ backend/
 │   │   ├── extractedCaseSchema.js     # known extractedCase field names + sanitizer
 │   │   └── aiResponseSchemas.js       # validates/sanitizes every AI JSON response
 │   ├── repositories/
-│   │   └── caseRepository.js          # Parse persistence + Parse -> client JSON mapping
+│   │   ├── caseRepository.js          # MMCase Parse persistence + Parse -> client JSON mapping
+│   │   └── aiCostRepository.js        # MMCaseAICost Parse persistence (per-call AI cost/token log)
 │   ├── utils/
 │   │   ├── logger.js
 │   │   ├── validation.js
 │   │   ├── errors.js                  # AppError subclasses + toParseError()
 │   │   └── idGenerator.js
 │   └── config/
-│       └── aiConfig.js                # model name, timeouts, retries -- from env vars
+│       ├── aiConfig.js                # model name, timeouts, retries -- from env vars
+│       └── aiPricing.js               # USD-per-token pricing table used to cost each AI call
 ├── public/                            # static hosting (unrelated to Cloud Code)
 ├── tests/                             # Jest tests, no network / no live OpenAI calls
 ├── package.json                       # devDependencies only (jest) -- no runtime deps
@@ -101,6 +104,8 @@ backend/
 | Final presentation generation           | `ai/finalizer.js`                 |
 | Cloud Function parameters/validation    | `functions/*.js`, `utils/validation.js` |
 | Model name / timeouts / retries         | `config/aiConfig.js`              |
+| AI cost pricing / which models are priced | `config/aiPricing.js`           |
+| How AI cost is recorded per case        | `repositories/aiCostRepository.js`, `services/caseService.js#recordAIUsage` |
 | Case status values                      | `schemas/caseStatus.js`           |
 | What an AI JSON response must contain   | `schemas/aiResponseSchemas.js`    |
 
@@ -118,20 +123,21 @@ This project uses the classic Back4App Cloud Code layout (`cloud/`,
    | Variable             | Required | Default        | Purpose |
    | --------------------- | -------- | -------------- | ------- |
    | `OPENAI_API_KEY`      | yes      | (none)         | OpenAI API key. Never committed, never sent to the client. |
-   | `OPENAI_MODEL`        | no       | `gpt-4o-mini`  | Chat Completions model used for all AI calls. |
+   | `OPENAI_MODEL`        | no       | `gpt-4o`  | Chat Completions model used for all AI calls. |
    | `OPENAI_TIMEOUT_MS`   | no       | `30000`        | Per-request timeout to the AI provider. |
    | `OPENAI_MAX_RETRIES`  | no       | `2`            | Retries on 429/5xx or transport errors. |
 
    See `.env.example` for a local-reference copy of these names (Back4App
    does not read that file; it's documentation only).
 
-2. **Class-Level Permissions (CLP)** -- the `MMCase` Parse class is created
-   automatically the first time `mmCreateCase` runs (Cloud Code uses the
-   master key). Lock down MMCase's CLP in the dashboard so **no direct
-   client REST/SDK access** is allowed (no public find/get/create/
-   update/delete) -- only Cloud Code, which uses the master key, can read
-   or write it. Per-object ACLs (see "Authentication" below) are
-   defense-in-depth for if this is ever loosened, not a substitute for it.
+2. **Class-Level Permissions (CLP)** -- `MMCase` and `MMCaseAICost` are
+   both created automatically the first time they're written (Cloud Code
+   uses the master key). Lock down both classes' CLP in the dashboard so
+   **no direct client REST/SDK access** is allowed (no public find/get/
+   create/update/delete) -- only Cloud Code, which uses the master key,
+   can read or write them. Per-object ACLs (see "Authentication" below)
+   are defense-in-depth for if this is ever loosened, not a substitute
+   for it.
 
 3. **No client OpenAI access** -- the client never receives an OpenAI
    credential, never chooses the model, and never supplies its own system
@@ -256,12 +262,61 @@ Parse supplies `objectId`, `createdAt`, `updatedAt` automatically.
 | `references`              | Array   | `{ topic, searchIntent, citation: null, verified: false }[]`. No citations are fabricated in the MVP. |
 | `promptVersion`           | Object  | Tracks which prompt version produced each part of the case, e.g. `{ analyze: "1.0.0", question: "1.0.0", finalize: "1.0.0" }`. |
 | `aiModel`                 | String\|null | The model name used for the most recent AI call on this case. |
+| `aiCostUSD`                | Number  | Running total across every AI call made for this case, in USD. `0` for a call whose model isn't in `config/aiPricing.js` (unpriced calls still count toward `aiTotalTokens`). See "AI cost tracking" below. |
+| `aiTotalTokens`            | Number  | Running total prompt+completion tokens across every AI call made for this case. |
+
+---
+
+## AI cost tracking
+
+Every AI provider call already returns a token `usage` object (see
+`services/aiService.js`); `services/caseService.js#recordAIUsage` turns
+that into an estimated dollar cost (`config/aiPricing.js`) and persists
+it two ways:
+
+1. **`MMCaseAICost`** -- one row per AI call, so cost is auditable per
+   operation, not just visible as a total. See schema below.
+2. **`MMCase.aiCostUSD` / `MMCase.aiTotalTokens`** -- a running total on
+   the case itself (`repositories/caseRepository.js#incrementAIUsage`,
+   using Parse's atomic `increment()` so concurrent calls for the same
+   case can't clobber each other), so reading the total doesn't require
+   summing the per-call rows.
+
+Recording never blocks or fails the actual case workflow: if
+`aiCostRepository.record`/`incrementAIUsage` throws (or the call's model
+isn't in the pricing table), the error is logged and swallowed --
+`mmCreateCase`/`mmAnswerQuestion`/`mmFinalizeCase` still succeed
+normally. `mmCorrectDictation` (dictation-time terminology correction)
+is **not** tracked here -- it isn't reliably tied to a case id (it can
+run before a case exists, during the initial dictation), so its usage
+isn't currently recorded anywhere.
+
+### Parse `MMCaseAICost` schema
+
+One row per AI provider call. Parse supplies `objectId`/`createdAt`
+automatically (`updatedAt` is unused -- rows are never modified after
+creation).
+
+| Field               | Type    | Notes |
+| -------------------- | ------- | ----- |
+| `case`                | Pointer\<`MMCase`\> | The case this call was made for. |
+| `owner`               | Pointer\<`_User`\> | Same owner as the case, set from `request.user`. |
+| `operation`           | String  | Which AI call this was: `analyzeInitialNarrative`, `incorporateAnswer`, `generateNextQuestion`, or `finalizeCase`. |
+| `model`               | String  | The OpenAI model used (`config/aiConfig.js#getModel`). |
+| `promptTokens` / `completionTokens` / `totalTokens` | Number | From the provider's `usage` object. |
+| `costUSD`             | Number\|null | `null` when `model` isn't in `config/aiPricing.js` -- never a guessed number. |
+| `latencyMs`           | Number\|null | The AI call's round-trip time. |
+
+Like `MMCase`, this class should have its CLP locked to Cloud-Code-only
+access (no direct client REST/SDK access) -- see "Back4App setup" above.
+Its per-object ACL restricts read/write to the owning user as
+defense-in-depth, for the same reason `MMCase`'s does.
 
 ---
 
 ## Cloud Functions
 
-All four functions are namespaced with an `mm` prefix.
+All functions are namespaced with an `mm` prefix.
 
 ### `mmCreateCase`
 
@@ -347,6 +402,36 @@ likely faculty questions, and pending reference topics; sets
 extractedCase, conversation history, currentQuestion/nextQuestion,
 finalized materials once present, promptVersion, aiModel, timestamps). Raw
 AI provider responses are never included.
+
+### `mmGetCaseAICost`
+
+**Params:** `{ caseId: string }`.
+
+**Behavior:** returns the case's running AI cost/token total plus every
+individually recorded AI call. See "AI cost tracking" above.
+
+**Response:**
+
+```json
+{
+  "caseId": "abc123",
+  "totalCostUSD": 0.0234,
+  "totalTokens": 1850,
+  "calls": [
+    {
+      "objectId": "xyz1",
+      "operation": "analyzeInitialNarrative",
+      "model": "gpt-4o",
+      "promptTokens": 620,
+      "completionTokens": 140,
+      "totalTokens": 760,
+      "costUSD": 0.0029,
+      "latencyMs": 842,
+      "createdAt": "2026-08-19T14:02:11.000Z"
+    }
+  ]
+}
+```
 
 ### Errors
 

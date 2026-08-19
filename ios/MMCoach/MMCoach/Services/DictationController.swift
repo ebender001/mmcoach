@@ -178,8 +178,31 @@ final class DictationController: ObservableObject {
             onCorrectedText?(medicalDictionary.correctedTranscript(
                 Self.merge(base: priorText, sessionText: segment)
             ))
-            dictationErrorMessage = "Couldn't reach the server to double-check medical terms, so a quick on-device check was used instead."
+            dictationErrorMessage = Self.dictationCorrectionFallbackMessage(for: error)
         }
         dictationPhase = .idle
+    }
+
+    /// `error` is whatever `BackendService.correctDictation` threw --
+    /// always a `BackendError` in practice, since `BackendService.run(_:)`
+    /// maps every failure to one before it ever reaches here. Distinguish
+    /// the reason (dropped connection vs. a server/AI-provider problem vs.
+    /// a malformed response) rather than always blaming "the server" --
+    /// only the first of those is actually a connectivity issue.
+    private static func dictationCorrectionFallbackMessage(for error: Error) -> String {
+        let reason: String
+        switch error as? BackendError {
+        case .network:
+            reason = "MMCoach couldn't reach the server to double-check medical terms."
+        case .decoding:
+            reason = "MMCoach couldn't read the server's response while checking medical terms."
+        case .server, .invalidState, .notFound, .validation:
+            reason = "The server couldn't check medical terms right now."
+        case .sessionExpired:
+            reason = "Your session expired, so medical terms couldn't be double-checked."
+        case nil:
+            reason = "MMCoach couldn't double-check medical terms right now."
+        }
+        return "\(reason) A quick on-device check was used instead."
     }
 }

@@ -34,6 +34,34 @@ describe('caseRepository', () => {
     expect(created.createdAt).toBeInstanceOf(Date);
   });
 
+  it('initializes AI cost/token totals to zero', async () => {
+    const created = await caseRepository.create(baseRecord());
+
+    expect(created.aiCostUSD).toBe(0);
+    expect(created.aiTotalTokens).toBe(0);
+  });
+
+  it('incrementAIUsage adds to (not replaces) the running totals across multiple calls', async () => {
+    const created = await caseRepository.create(baseRecord());
+
+    await caseRepository.incrementAIUsage(created.objectId, { costUSD: 0.01, totalTokens: 150 });
+    await caseRepository.incrementAIUsage(created.objectId, { costUSD: 0.02, totalTokens: 100 });
+
+    const fetched = await caseRepository.getById(created.objectId);
+    expect(fetched.aiCostUSD).toBeCloseTo(0.03, 10);
+    expect(fetched.aiTotalTokens).toBe(250);
+  });
+
+  it('incrementAIUsage advances the token total even when costUSD is null (unpriced model)', async () => {
+    const created = await caseRepository.create(baseRecord());
+
+    await caseRepository.incrementAIUsage(created.objectId, { costUSD: null, totalTokens: 75 });
+
+    const fetched = await caseRepository.getById(created.objectId);
+    expect(fetched.aiCostUSD).toBe(0);
+    expect(fetched.aiTotalTokens).toBe(75);
+  });
+
   it('restricts the saved object ACL to the owning user, with no public access', async () => {
     const created = await caseRepository.create(baseRecord());
     const acl = store.get(created.objectId).acl;

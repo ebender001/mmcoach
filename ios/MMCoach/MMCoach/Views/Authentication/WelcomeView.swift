@@ -24,6 +24,11 @@ struct WelcomeView: View {
             VStack(spacing: 0) {
                 Spacer(minLength: 16)
 
+                if let message = viewModel.sessionExpiredMessage {
+                    sessionExpiredBanner(message)
+                        .padding(.bottom, 16)
+                }
+
                 header
 
                 Spacer(minLength: 20)
@@ -51,6 +56,27 @@ struct WelcomeView: View {
         .sheet(isPresented: $isPresentingEmailAuth) {
             EmailAuthenticationView(viewModel: viewModel)
         }
+    }
+
+    /// Quiet, non-alarming notice -- landing back on Welcome because a
+    /// stale session was cleared isn't an error the trainee did anything
+    /// wrong to cause, so this deliberately doesn't use the red styling
+    /// `appleSignInErrorMessage`/form errors use.
+    private func sessionExpiredBanner(_ message: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "info.circle")
+                .foregroundStyle(Color.mutedTeal)
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(Color.slateText)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+        .accessibilityElement(children: .combine)
     }
 
     private var header: some View {
@@ -137,4 +163,14 @@ struct WelcomeView: View {
                                              appleSignIn: PreviewAppleSignInService())
     viewModel.appleSignInErrorMessage = "Sign in with Apple didn't complete. Please try again."
     return WelcomeView(viewModel: viewModel)
+}
+
+#Preview("Session expired") {
+    let viewModel = AuthenticationViewModel(authService: PreviewAuthenticationService(currentUserResult: .preview),
+                                             appleSignIn: PreviewAppleSignInService())
+    return WelcomeView(viewModel: viewModel)
+        .task {
+            await viewModel.refreshSession()
+            NotificationCenter.default.post(name: .mmSessionExpired, object: nil)
+        }
 }

@@ -100,6 +100,16 @@ struct HomeView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(Color.warmBackground)
+            // On the List (the NavigationStack's root content), not the
+            // NavigationStack itself -- the stack container only appears
+            // once for the app's lifetime, so an .onAppear there fires
+            // exactly once at launch and never again as the user
+            // navigates back to Home. Attached here, it fires every time
+            // Home becomes the visible screen again (including after the
+            // "Done" pop-to-root from CaseSummaryView), which is what
+            // actually keeps a newly created/updated case's Recent Cases
+            // entry current without restarting the app.
+            .onAppear { viewModel.refresh() }
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: AppRoute.self) { route in
                 destination(for: route)
@@ -128,7 +138,6 @@ struct HomeView: View {
                 }
             }
         }
-        .onAppear { viewModel.refresh() }
     }
 
     private var header: some View {
@@ -173,7 +182,8 @@ struct HomeView: View {
             CaseInterviewView(viewModel: CaseInterviewViewModel(caseId: caseId, initialCase: initialCase),
                                path: $path)
         case .summary(let caseId, let initialCase):
-            CaseSummaryView(viewModel: CaseSummaryViewModel(caseId: caseId, initialCase: initialCase))
+            CaseSummaryView(viewModel: CaseSummaryViewModel(caseId: caseId, initialCase: initialCase),
+                             path: $path)
         }
     }
 }

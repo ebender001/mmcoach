@@ -13,6 +13,7 @@ require('../cloud/functions/createCase');
 require('../cloud/functions/answerQuestion');
 require('../cloud/functions/finalizeCase');
 require('../cloud/functions/getCase');
+require('../cloud/functions/getCaseAICost');
 require('../cloud/functions/correctDictation');
 
 afterEach(() => jest.clearAllMocks());
@@ -190,6 +191,43 @@ describe('mmGetCase', () => {
 
     expect(caseService.getCase).toHaveBeenCalledWith({ caseId: 'abc123', ownerId: 'user1' });
     expect(result.caseId).toBe('abc123');
+  });
+});
+
+describe('mmGetCaseAICost', () => {
+  it('rejects an unauthenticated request without calling the service', async () => {
+    await expect(
+      cloudRegistry.mmGetCaseAICost({ params: { caseId: 'abc123' } })
+    ).rejects.toMatchObject({ code: Parse.Error.INVALID_SESSION_TOKEN });
+    expect(caseService.getCaseAICost).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing caseId', async () => {
+    await expect(cloudRegistry.mmGetCaseAICost({ params: {}, user: AUTH_USER })).rejects.toThrow();
+    expect(caseService.getCaseAICost).not.toHaveBeenCalled();
+  });
+
+  it('propagates not-found for a case that does not belong to the caller', async () => {
+    caseService.getCaseAICost.mockRejectedValue(new NotFoundError('No case found with id abc123.'));
+
+    await expect(
+      cloudRegistry.mmGetCaseAICost({ params: { caseId: 'abc123' }, user: AUTH_USER })
+    ).rejects.toMatchObject({ code: Parse.Error.OBJECT_NOT_FOUND });
+  });
+
+  it('returns the cost breakdown for the caller', async () => {
+    caseService.getCaseAICost.mockResolvedValue({
+      caseId: 'abc123',
+      totalCostUSD: 0.0234,
+      totalTokens: 900,
+      calls: [{ objectId: 'ac1', operation: 'analyzeInitialNarrative', model: 'gpt-4o', costUSD: 0.0234, totalTokens: 900 }],
+    });
+
+    const result = await cloudRegistry.mmGetCaseAICost({ params: { caseId: 'abc123' }, user: AUTH_USER });
+
+    expect(caseService.getCaseAICost).toHaveBeenCalledWith({ caseId: 'abc123', ownerId: 'user1' });
+    expect(result.totalCostUSD).toBe(0.0234);
+    expect(result.calls).toHaveLength(1);
   });
 });
 

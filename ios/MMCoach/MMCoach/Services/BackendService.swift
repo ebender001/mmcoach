@@ -20,6 +20,13 @@ enum BackendError: LocalizedError, Equatable {
     case validation(String)
     case notFound
     case invalidState(String)
+    /// The caller's Parse session is missing/expired/revoked -- every
+    /// `mm*` Cloud Function requires one (see backend `requireUser`).
+    /// `BackendService.run(_:)` also broadcasts `.sessionExpired` via
+    /// `NotificationCenter` when this is thrown, which is what lets
+    /// `AuthenticationViewModel` force a clean sign-out/re-auth instead of
+    /// the app being stuck retrying calls a dead session can never pass.
+    case sessionExpired
     case server
     case network
     case decoding
@@ -32,6 +39,8 @@ enum BackendError: LocalizedError, Equatable {
             return "This case is no longer available."
         case .invalidState(let message):
             return message
+        case .sessionExpired:
+            return "Your session expired. Please sign in again."
         case .server:
             return "Something went wrong preparing your case. Please try again."
         case .network:
@@ -49,12 +58,24 @@ enum BackendError: LocalizedError, Equatable {
             self = .notFound
         case .operationForbidden:
             self = .invalidState(parseError.message)
+        case .invalidSessionToken:
+            self = .sessionExpired
         case .connectionFailed, .timeout:
             self = .network
         default:
             self = .server
         }
     }
+}
+
+extension Notification.Name {
+    /// Posted by `BackendService` whenever a Cloud Function call fails
+    /// because the local session is no longer valid server-side.
+    /// `AuthenticationViewModel` is the sole subscriber -- it forces a
+    /// local sign-out and returns to the Welcome screen so the trainee
+    /// re-authenticates instead of hitting the same dead-session error
+    /// repeatedly on every subsequent case action.
+    static let mmSessionExpired = Notification.Name("MMCoach.sessionExpired")
 }
 
 enum BackendService {
@@ -85,7 +106,11 @@ enum BackendService {
         do {
             return try await function.runFunction()
         } catch let error as ParseError {
-            throw BackendError(parseError: error)
+            let mapped = BackendError(parseError: error)
+            if mapped == .sessionExpired {
+                NotificationCenter.default.post(name: .mmSessionExpired, object: nil)
+            }
+            throw mapped
         } catch is DecodingError {
             throw BackendError.decoding
         } catch {

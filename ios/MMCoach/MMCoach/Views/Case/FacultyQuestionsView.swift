@@ -2,10 +2,10 @@
 //  FacultyQuestionsView.swift
 //  MMCoach
 //
-//  Displays likely faculty questions. Laid out as a simple scannable list
-//  today; the per-row structure leaves room for an interactive practice
-//  mode (e.g. tap to rehearse an answer) to be added later without
-//  reworking this screen.
+//  Displays likely faculty questions as stacked cards (matching
+//  DiscussionPrepView/ReferencesView). The per-card structure leaves room
+//  for an interactive practice mode (e.g. tap to rehearse an answer) to
+//  be added later without reworking this screen.
 //
 
 import SwiftUI
@@ -25,10 +25,8 @@ struct FacultyQuestionsView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
-                    VStack(alignment: .leading, spacing: 16) {
-                        ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
-                            questionRow(number: index + 1, question: question)
-                        }
+                    ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
+                        questionCard(number: index + 1, question: question)
                     }
                 }
             }
@@ -36,7 +34,7 @@ struct FacultyQuestionsView: View {
         }
     }
 
-    private func questionRow(number: Int, question: String) -> some View {
+    private func questionCard(number: Int, question: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Text("\(number)")
                 .font(.caption.weight(.bold))
@@ -48,6 +46,7 @@ struct FacultyQuestionsView: View {
                 .font(.body)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .polishedCard()
     }
 }
 

@@ -40,6 +40,8 @@ function toClientJSON(parseObject) {
     references: parseObject.get('references') || [],
     promptVersion: parseObject.get('promptVersion') || {},
     aiModel: parseObject.get('aiModel') || null,
+    aiCostUSD: parseObject.get('aiCostUSD') || 0,
+    aiTotalTokens: parseObject.get('aiTotalTokens') || 0,
     createdAt: parseObject.createdAt,
     updatedAt: parseObject.updatedAt,
   };
@@ -54,7 +56,7 @@ function toClientJSON(parseObject) {
 async function create({ ownerId, ...record }) {
   const MMCase = getMMCaseClass();
   const parseObject = new MMCase();
-  applyFields(parseObject, record);
+  applyFields(parseObject, { aiCostUSD: 0, aiTotalTokens: 0, ...record });
 
   const owner = Parse.User.createWithoutData(ownerId);
   parseObject.set('owner', owner);
@@ -95,4 +97,24 @@ async function update(caseId, patch) {
   return toClientJSON(parseObject);
 }
 
-module.exports = { create, getById, update, toClientJSON, CASE_CLASS_NAME };
+/**
+ * Adds to MMCase's running AI-cost/token totals -- called once per AI
+ * provider call (see caseService.js), separately from `update()`'s
+ * patch-based writes since this needs a true atomic increment rather
+ * than a read-then-overwrite of a JS number, which would lose an update
+ * if two AI calls for the same case ever finished close together.
+ * `costUSD` may be `null` (unpriced model, see `config/aiPricing.js`),
+ * in which case only the token total advances.
+ */
+async function incrementAIUsage(caseId, { costUSD, totalTokens }) {
+  const MMCase = getMMCaseClass();
+  const query = new Parse.Query(MMCase);
+  const parseObject = await query.get(caseId, { useMasterKey: true });
+  if (typeof costUSD === 'number') {
+    parseObject.increment('aiCostUSD', costUSD);
+  }
+  parseObject.increment('aiTotalTokens', totalTokens || 0);
+  await parseObject.save(null, { useMasterKey: true });
+}
+
+module.exports = { create, getById, update, incrementAIUsage, toClientJSON, CASE_CLASS_NAME };

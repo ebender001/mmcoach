@@ -21,6 +21,12 @@ enum EmailAuthMode: Equatable {
 @MainActor
 final class AuthenticationViewModel: ObservableObject {
     @Published private(set) var state: AuthenticationState = .checkingSession
+    /// Set only when `state` moves to `.signedOut` because the backend
+    /// rejected a call with an expired/invalid session (see
+    /// `.mmSessionExpired` in BackendService) -- not on an explicit Sign
+    /// Out from AccountView. Shown on WelcomeView so landing back there
+    /// unexpectedly doesn't look like a bug.
+    @Published private(set) var sessionExpiredMessage: String?
 
     // Sign in with Apple
     @Published private(set) var isAppleSignInInProgress = false
@@ -49,11 +55,18 @@ final class AuthenticationViewModel: ObservableObject {
 
     private let authService: AuthenticationService
     private let appleSignIn: AppleSignInCredentialExtracting
+    private var sessionExpiryObservation: AnyCancellable?
 
     init(authService: AuthenticationService = ParseAuthenticationService(),
          appleSignIn: AppleSignInCredentialExtracting = AppleSignInService()) {
         self.authService = authService
         self.appleSignIn = appleSignIn
+        sessionExpiryObservation = NotificationCenter.default
+            .publisher(for: .mmSessionExpired)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { await self?.handleSessionExpired() }
+            }
     }
 
     /// Checks for an already-persisted session at launch. Fast and
@@ -71,6 +84,7 @@ final class AuthenticationViewModel: ObservableObject {
     /// system UI and produced this result -- this only interprets it.
     func handleAppleSignInResult(_ result: Result<ASAuthorization, Error>) async {
         appleSignInErrorMessage = nil
+        sessionExpiredMessage = nil
         do {
             let credential = try appleSignIn.credential(from: result)
             isAppleSignInInProgress = true
@@ -104,6 +118,7 @@ final class AuthenticationViewModel: ObservableObject {
     func submitEmailForm() async {
         guard !isSubmittingEmailForm else { return }
         formErrorMessage = nil
+        sessionExpiredMessage = nil
         guard validateEmailForm() else { return }
 
         isSubmittingEmailForm = true
@@ -190,6 +205,24 @@ final class AuthenticationViewModel: ObservableObject {
     func signOut() async {
         try? await authService.signOut()
         state = .signedOut
+        sessionExpiredMessage = nil
+    }
+
+    /// There is no way to silently obtain a new session without the
+    /// person re-authenticating -- Parse never gives the client a stored
+    /// password to replay, and Apple doesn't hand out a fresh identity
+    /// token without its own UI. So this doesn't attempt a background
+    /// login; it clears the dead local session (mirroring `signOut()`,
+    /// including tolerating `authService.signOut()` itself failing, since
+    /// the session it's trying to invalidate server-side is already the
+    /// one that's invalid) and routes back to Welcome with an explanation,
+    /// rather than leaving the trainee stuck retrying case actions that
+    /// can never succeed with a dead session.
+    private func handleSessionExpired() async {
+        guard case .signedIn = state else { return }
+        try? await authService.signOut()
+        state = .signedOut
+        sessionExpiredMessage = "Your session expired. Please sign in again."
     }
 
     private static func isValidEmail(_ value: String) -> Bool {

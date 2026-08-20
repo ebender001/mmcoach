@@ -117,4 +117,16 @@ async function incrementAIUsage(caseId, { costUSD, totalTokens }) {
   await parseObject.save(null, { useMasterKey: true });
 }
 
-module.exports = { create, getById, update, incrementAIUsage, toClientJSON, CASE_CLASS_NAME };
+/**
+ * Number of cases owned by a user, regardless of status. Used to decide
+ * first-case-free eligibility -- the backend is the source of truth for
+ * this, never an on-device count.
+ */
+async function countByOwner(ownerId) {
+  const MMCase = getMMCaseClass();
+  const query = new Parse.Query(MMCase);
+  query.equalTo('owner', Parse.User.createWithoutData(ownerId));
+  return query.count({ useMasterKey: true });
+}
+
+module.exports = { create, getById, update, incrementAIUsage, countByOwner, toClientJSON, CASE_CLASS_NAME };

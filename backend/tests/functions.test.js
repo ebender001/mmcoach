@@ -17,6 +17,7 @@ require('../cloud/functions/createCase');
 require('../cloud/functions/answerQuestion');
 require('../cloud/functions/finalizeCase');
 require('../cloud/functions/getCase');
+require('../cloud/functions/getCaseCount');
 require('../cloud/functions/updatePolishedNarrative');
 require('../cloud/functions/getCaseAICost');
 require('../cloud/functions/findReferences');
@@ -197,6 +198,24 @@ describe('mmGetCase', () => {
 
     expect(caseService.getCase).toHaveBeenCalledWith({ caseId: 'abc123', ownerId: 'user1' });
     expect(result.caseId).toBe('abc123');
+  });
+});
+
+describe('mmGetCaseCount', () => {
+  it('rejects an unauthenticated request without calling the service', async () => {
+    await expect(
+      cloudRegistry.mmGetCaseCount({ params: {} })
+    ).rejects.toMatchObject({ code: Parse.Error.INVALID_SESSION_TOKEN });
+    expect(caseService.getCaseCount).not.toHaveBeenCalled();
+  });
+
+  it('returns the caller\'s case count', async () => {
+    caseService.getCaseCount.mockResolvedValue({ caseCount: 3 });
+
+    const result = await cloudRegistry.mmGetCaseCount({ params: {}, user: AUTH_USER });
+
+    expect(caseService.getCaseCount).toHaveBeenCalledWith({ ownerId: 'user1' });
+    expect(result.caseCount).toBe(3);
   });
 });
 

@@ -95,6 +95,14 @@ enum BackendService {
         try await run(GetCaseFunction(caseId: caseId))
     }
 
+    /// Number of cases the signed-in user owns, regardless of status --
+    /// the backend-sourced truth behind the paywall's first-case-free
+    /// decision. Never derive this from `RecentCasesStore` (a local,
+    /// per-device cache) or any other on-device count.
+    static func getCaseCount() async throws -> Int {
+        try await run(GetCaseCountFunction()).caseCount
+    }
+
     /// Overwrites the polished narrative on an already-finalized case.
     /// Only valid once the case is `completed` -- the backend rejects it
     /// otherwise via `BackendError.invalidState`.
@@ -167,6 +175,15 @@ private struct GetCaseFunction: ParseCloudable {
     typealias ReturnType = MMCase
     var functionJobName = "mmGetCase"
     var caseId: String
+}
+
+private struct CaseCountResponse: Decodable {
+    let caseCount: Int
+}
+
+private struct GetCaseCountFunction: ParseCloudable {
+    typealias ReturnType = CaseCountResponse
+    var functionJobName = "mmGetCaseCount"
 }
 
 private struct UpdatePolishedNarrativeFunction: ParseCloudable {

@@ -53,7 +53,13 @@ struct HomeView: View {
                 .listRowBackground(Color.clear)
 
                 Section {
-                    NewCaseActionCard { path.append(.newCase) }
+                    NewCaseActionCard {
+                        Task {
+                            if await viewModel.startNewCase() {
+                                path.append(.newCase)
+                            }
+                        }
+                    }
                 }
                 .listRowSeparator(.hidden)
                 .listRowInsets(rowInsets(top: 4, bottom: 6))
@@ -135,6 +141,12 @@ struct HomeView: View {
                 AccountView(user: currentUser) {
                     isPresentingAccount = false
                     onSignOut?()
+                }
+            }
+            .sheet(isPresented: $viewModel.isPresentingPaywall) {
+                PaywallView {
+                    viewModel.paywallDidUnlockAccess()
+                    path.append(.newCase)
                 }
             }
         }

@@ -8,6 +8,7 @@
 //  backend/README.md "Remaining backend work" for why).
 //
 
+import StoreKit
 import SwiftUI
 
 struct AccountView: View {
@@ -16,6 +17,7 @@ struct AccountView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var isSigningOut = false
+    @State private var isPresentingManageSubscriptions = false
 
     var body: some View {
         NavigationStack {
@@ -27,6 +29,19 @@ struct AccountView: View {
                     if let email = user?.email {
                         LabeledContent("Email", value: email)
                     }
+                }
+
+                Section {
+                    Button {
+                        isPresentingManageSubscriptions = true
+                    } label: {
+                        Label("Manage Subscription", systemImage: "creditcard")
+                    }
+                } footer: {
+                    // Apple owns auto-renewal/cancellation -- this only
+                    // opens Apple's own subscription-management UI, never
+                    // a manual "renew" control of our own.
+                    Text("Opens Apple's subscription management, where you can view, change, or cancel your M & M Coach subscription.")
                 }
 
                 Section {
@@ -57,6 +72,7 @@ struct AccountView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .manageSubscriptionsSheet(isPresented: $isPresentingManageSubscriptions)
         }
     }
 

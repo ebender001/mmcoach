@@ -7,6 +7,7 @@ require('./functions/createCase');
 require('./functions/answerQuestion');
 require('./functions/finalizeCase');
 require('./functions/getCase');
+require('./functions/getCaseCount');
 require('./functions/updatePolishedNarrative');
 require('./functions/getCaseAICost');
 require('./functions/findReferences');

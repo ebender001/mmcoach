@@ -215,6 +215,16 @@ async function getCase({ caseId, ownerId }) {
 }
 
 /**
+ * Number of cases the caller owns, regardless of status. Drives the
+ * paywall's first-case-free decision -- the client never decides this from
+ * a local cache.
+ */
+async function getCaseCount({ ownerId }) {
+  const caseCount = await caseRepository.countByOwner(ownerId);
+  return { caseCount };
+}
+
+/**
  * Lets the trainee hand-edit the polished narrative after finalization --
  * e.g. to fix a phrasing the AI got slightly wrong before presenting.
  * Only valid once a case is `completed` (there's nothing to edit before
@@ -290,6 +300,7 @@ module.exports = {
   answerQuestion,
   finalizeCase,
   getCase,
+  getCaseCount,
   updatePolishedNarrative,
   getCaseAICost,
   recordAIUsage,

@@ -1,0 +1,444 @@
+<!--
+  Drafted from this repository's actual data flows (Parse/Back4App
+  account + case storage, OpenAI processing, on-device PHI screening,
+  Apple Speech framework, PubMed lookups -- see backend/README.md and
+  ios/MMCoach/MMCoach/Services/PHIFilterService.swift). Entity name and
+  contact email are filled in (Bender Apps, LLC / support@benderapps.dev).
+  No mailing address is listed (email-only contact, per user choice).
+  Have this reviewed by counsel familiar with applicable privacy law
+  (GDPR/UK GDPR, CCPA/CPRA, and any other regions you operate in)
+  before relying on it for an App Store submission.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy — M &amp; M Coach</title>
+  <meta name="description" content="How M &amp; M Coach collects, uses, and protects information, including account data, case content, and AI processing." />
+  <meta name="theme-color" content="#00274C" />
+  <meta name="robots" content="index, follow" />
+
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap site-header__inner">
+      <a class="brand" href="index.html" aria-label="M &amp; M Coach home">
+        <span class="brand__mark" aria-hidden="true"></span>
+        <span class="brand__name">M &amp; M Coach</span>
+      </a>
+
+      <button
+        class="nav-toggle"
+        type="button"
+        id="nav-toggle"
+        aria-expanded="false"
+        aria-controls="primary-nav"
+      >
+        <span class="nav-toggle__box">
+          <span class="nav-toggle__bar"></span>
+          <span class="nav-toggle__bar"></span>
+          <span class="nav-toggle__bar"></span>
+        </span>
+        <span class="visually-hidden">Menu</span>
+      </button>
+
+      <nav class="site-nav" id="primary-nav" aria-label="Primary">
+        <ul class="site-nav__list">
+          <li><a href="index.html#how-it-works">How It Works</a></li>
+          <li><a href="index.html#features">Features</a></li>
+          <li><a href="index.html#for-trainees">For Trainees</a></li>
+          <li><a href="support.html">Support</a></li>
+        </ul>
+        <a class="btn btn-primary btn-sm site-nav__cta" href="index.html#" data-placeholder="app-store">
+          Download on the App Store
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <article class="legal">
+      <div class="wrap legal__wrap">
+        <header class="legal__header">
+          <p class="legal__eyebrow">Legal</p>
+          <h1>Privacy Policy</h1>
+          <p class="legal__updated">Last updated: August 20, 2026</p>
+          <p class="legal__intro">
+            This Privacy Policy explains how M &amp; M Coach ("we," "us,"
+            or "our"), operated by Bender Apps, LLC, collects, uses,
+            discloses, and protects information in connection with the
+            M &amp; M Coach iOS app (the "App") and this website
+            (together, the "Service"). It applies to users in the
+            United States and other countries. By using the Service,
+            you agree to the practices described here.
+          </p>
+        </header>
+
+        <nav class="legal__toc" aria-label="Table of contents">
+          <p class="legal__toc-title">On this page</p>
+          <ol>
+            <li><a href="#information-we-collect">Information we collect</a></li>
+            <li><a href="#how-we-use-information">How we use information</a></li>
+            <li><a href="#dictation-and-speech-recognition">Dictation and speech recognition</a></li>
+            <li><a href="#ai-processing-and-third-parties">AI processing and third parties</a></li>
+            <li><a href="#clinical-content-and-phi">Clinical content and patient information</a></li>
+            <li><a href="#data-storage-and-security">Data storage and security</a></li>
+            <li><a href="#data-retention">Data retention</a></li>
+            <li><a href="#your-rights-and-choices">Your rights and choices</a></li>
+            <li><a href="#international-data-transfers">International data transfers</a></li>
+            <li><a href="#childrens-privacy">Children's privacy</a></li>
+            <li><a href="#not-medical-advice">Not medical advice; not HIPAA compliant</a></li>
+            <li><a href="#changes-to-this-policy">Changes to this policy</a></li>
+            <li><a href="#contact-us">Contact us</a></li>
+          </ol>
+        </nav>
+
+        <section id="information-we-collect">
+          <h2>1. Information we collect</h2>
+
+          <h3>Account information</h3>
+          <p>
+            When you create an account, we collect the information
+            needed to authenticate you and keep your cases synced
+            across devices:
+          </p>
+          <ul>
+            <li>
+              <strong>Email and password</strong>, if you create an
+              account with email — your password is stored only as a
+              secure hash; we never store or have access to your
+              plain-text password.
+            </li>
+            <li>
+              <strong>Sign in with Apple</strong>, if you use that
+              option — we receive a stable, app-specific identifier
+              for your Apple ID, and your name and email only if Apple
+              provides them (typically on your first sign-in only; we
+              do not receive your real Apple ID email if you choose to
+              hide it).
+            </li>
+            <li>Whether your email address has been verified.</li>
+          </ul>
+
+          <h3>Case content</h3>
+          <p>
+            The App is built around clinical case preparation, so the
+            core information we store is what you provide about a
+            case: your typed or dictated case summary, your answers to
+            the App's follow-up questions, the resulting structured
+            case data, the polished narrative and any edits you make to
+            it, discussion-preparation topics, likely faculty
+            questions, and reference/citation information you view.
+          </p>
+
+          <h3>Technical and diagnostic information</h3>
+          <p>
+            Our backend infrastructure provider (see
+            <a href="#data-storage-and-security">Data storage and
+            security</a>) automatically logs standard technical
+            information needed to operate the Service securely and
+            reliably, such as request timestamps, session identifiers,
+            and IP address. We use AI-processing metadata (which
+            feature was used, the AI model, token counts, response
+            time, and estimated cost) to operate and improve the
+            Service; this metadata is tied to your account, not to
+            advertising identifiers.
+          </p>
+          <p>
+            The App does not include any third-party advertising or
+            analytics software development kits (SDKs), and we do not
+            use your information for advertising or ad targeting.
+          </p>
+        </section>
+
+        <section id="how-we-use-information">
+          <h2>2. How we use information</h2>
+          <p>We use the information described above to:</p>
+          <ul>
+            <li>Provide, maintain, and secure your account and the case-preparation workflow.</li>
+            <li>Generate AI-assisted content for your cases — follow-up questions, a polished narrative, discussion-preparation material, and relevant literature searches.</li>
+            <li>Sync your cases across your devices.</li>
+            <li>Diagnose problems, prevent abuse, and keep the Service reliable.</li>
+            <li>Communicate with you about your account, such as email verification or password reset.</li>
+            <li>Comply with legal obligations.</li>
+          </ul>
+          <p>
+            We do not sell your personal information, and we do not
+            use it to serve you advertising.
+          </p>
+        </section>
+
+        <section id="dictation-and-speech-recognition">
+          <h2>3. Dictation and speech recognition</h2>
+          <p>
+            If you dictate a case using the microphone, the App uses
+            Apple's Speech framework to convert your speech to text.
+            Recognition is not restricted to on-device processing:
+            when your device has a network connection, audio may be
+            sent to Apple's speech-recognition servers so that
+            medical-vocabulary recognition works accurately; if no
+            connection is available, recognition falls back to
+            on-device processing automatically. Apple's handling of
+            that audio is governed by Apple's own privacy practices,
+            not this policy.
+          </p>
+          <p>
+            Only the <strong>resulting text</strong> — never audio —
+            is sent onward to M &amp; M Coach's backend or to any AI provider.
+            We do not store audio recordings of your dictation.
+          </p>
+        </section>
+
+        <section id="ai-processing-and-third-parties">
+          <h2>4. AI processing and third parties</h2>
+          <p>
+            M &amp; M Coach uses the following third-party service providers
+            to operate the Service. Each processes information only as
+            necessary to provide their service to us, under their own
+            respective privacy and security practices:
+          </p>
+          <ul>
+            <li>
+              <strong>OpenAI</strong> — case narratives, your answers
+              to follow-up questions, and dictated text segments are
+              sent to OpenAI's API to generate extracted case data,
+              follow-up questions, the polished narrative, discussion
+              preparation, and to help construct literature searches.
+              This content is submitted through OpenAI's API, subject
+              to OpenAI's API data-usage policies in effect at the
+              time.
+            </li>
+            <li>
+              <strong>Back4App / Parse Server</strong> — our backend
+              hosting provider, which stores your account and case
+              data and enforces that only you can read or modify your
+              own cases.
+            </li>
+            <li>
+              <strong>National Library of Medicine / PubMed
+              (NCBI)</strong> — when you look up literature for a case
+              topic, a search query derived from that topic (not your
+              full case narrative) is sent to NCBI's public
+              E-utilities service to retrieve relevant published
+              abstracts.
+            </li>
+            <li>
+              <strong>Apple</strong> — for Sign in with Apple, speech
+              recognition (see above), and standard App Store/operating
+              system services.
+            </li>
+          </ul>
+        </section>
+
+        <section id="clinical-content-and-phi">
+          <h2>5. Clinical content and patient information</h2>
+          <p>
+            M &amp; M Coach is an educational case-preparation tool.
+            <strong>You must not enter real patient identifiers</strong>
+            — names, medical record numbers, exact dates, contact
+            information, or any other information that could identify
+            a specific patient, staff member, or institution. Use
+            de-identified, illustrative, or approximate details, as you
+            would when presenting at conference.
+          </p>
+          <p>
+            As a safety net, the App screens text you dictate or type,
+            on-device, for likely patient names, staff or institution
+            names, and procedure dates, and removes what it finds
+            before that text is sent anywhere. This is an automated,
+            best-effort check for a deliberately narrow set of patterns
+            — it is <strong>not</strong> a complete, guideline-level
+            de-identification process (it does not, for example, catch
+            every category of identifier a formal standard would), and
+            it cannot screen audio already sent to a speech-recognition
+            server before it becomes text (see
+            <a href="#dictation-and-speech-recognition">Dictation and
+            speech recognition</a>). It is a backstop, not a substitute
+            for not entering identifying information in the first
+            place.
+          </p>
+        </section>
+
+        <section id="data-storage-and-security">
+          <h2>6. Data storage and security</h2>
+          <ul>
+            <li>All network communication between the App and our backend uses encrypted transport (HTTPS/TLS).</li>
+            <li>Your cases are stored with access controls that restrict them to your account — another user cannot read or modify your cases.</li>
+            <li>Account passwords are stored only as secure hashes.</li>
+            <li>Our infrastructure provider(s) may store data on servers located in the United States and other countries in which they operate.</li>
+          </ul>
+          <p>
+            No method of storage or transmission is completely secure.
+            We work to protect your information but cannot guarantee
+            absolute security.
+          </p>
+        </section>
+
+        <section id="data-retention">
+          <h2>7. Data retention</h2>
+          <p>
+            We retain your account and case data for as long as your
+            account is active, so that your cases remain available
+            across your devices. A local, on-device list of your
+            recent cases is also kept on your device for quick access;
+            deleting the App removes that local list but does not, by
+            itself, delete your account or case data from our servers.
+            You may request deletion of your account and associated
+            case data at any time — see
+            <a href="#your-rights-and-choices">Your rights and
+            choices</a>.
+          </p>
+        </section>
+
+        <section id="your-rights-and-choices">
+          <h2>8. Your rights and choices</h2>
+          <p>
+            Depending on where you live, you may have some or all of
+            the following rights regarding your personal information:
+            to access the information we hold about you; to correct
+            inaccurate information; to request deletion of your
+            information; to receive a copy of your information in a
+            portable format; and to object to or request that we
+            restrict certain processing.
+          </p>
+          <p>
+            You can exercise most of these rights directly in the App
+            — for example, editing your case narrative, or signing out.
+            For account deletion or any other request, contact us
+            using the details in <a href="#contact-us">Contact
+            us</a>; we will verify your request and respond within the
+            time required by applicable law.
+          </p>
+
+          <h3>California residents (CCPA/CPRA)</h3>
+          <p>
+            We do not sell or share personal information as those
+            terms are defined under California law, and we have not
+            done so in the preceding 12 months. California residents
+            have the rights described above, as well as the right not
+            to receive discriminatory treatment for exercising them.
+          </p>
+
+          <h3>EEA, UK, and other regions with data protection laws</h3>
+          <p>
+            If applicable law provides a legal basis framework (such as
+            the GDPR), we process your account and case data based on
+            our need to perform our contract with you (providing the
+            Service you signed up for), and technical/diagnostic
+            information based on our legitimate interest in operating
+            a secure and reliable Service. You may have the right to
+            lodge a complaint with your local data protection
+            authority.
+          </p>
+        </section>
+
+        <section id="international-data-transfers">
+          <h2>9. International data transfers</h2>
+          <p>
+            M &amp; M Coach and the service providers described in
+            <a href="#ai-processing-and-third-parties">AI processing
+            and third parties</a> may process and store information in
+            the United States or other countries that may have data
+            protection laws different from those in your country. Where
+            required, we take steps intended to ensure information
+            transferred internationally receives an appropriate level
+            of protection.
+          </p>
+        </section>
+
+        <section id="childrens-privacy">
+          <h2>10. Children's privacy</h2>
+          <p>
+            M &amp; M Coach is intended for surgical trainees and other adult
+            healthcare professionals and is not directed to children.
+            We do not knowingly collect personal information from
+            children under 16. If you believe a child has provided us
+            with personal information, contact us and we will take
+            appropriate steps to delete it.
+          </p>
+        </section>
+
+        <section id="not-medical-advice">
+          <h2>11. Not medical advice; not HIPAA compliant</h2>
+          <p>
+            M &amp; M Coach is an educational preparation tool. It does not
+            provide medical advice and does not replace clinical
+            judgment, institutional policy, or supervision. M &amp; M Coach
+            is <strong>not</strong> represented or intended to be a HIPAA
+            "covered entity" or "business associate," and the Service
+            is not intended to be used to store or transmit protected
+            health information (PHI). Do not enter real patient
+            identifiers — see
+            <a href="#clinical-content-and-phi">Clinical content and
+            patient information</a>.
+          </p>
+        </section>
+
+        <section id="changes-to-this-policy">
+          <h2>12. Changes to this policy</h2>
+          <p>
+            We may update this Privacy Policy from time to time. If we
+            make material changes, we will update the "Last updated"
+            date above and, where appropriate, provide additional
+            notice (such as an in-app notice). Your continued use of
+            the Service after a change becomes effective constitutes
+            acceptance of the revised policy.
+          </p>
+        </section>
+
+        <section id="contact-us">
+          <h2>13. Contact us</h2>
+          <p>
+            If you have questions about this Privacy Policy or want to
+            exercise any of the rights described above, contact us at:
+          </p>
+          <p class="legal__contact">
+            <strong>Bender Apps, LLC</strong><br />
+            Email: <a href="mailto:support@benderapps.dev">support@benderapps.dev</a>
+          </p>
+        </section>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="site-footer__top">
+        <div class="brand brand--footer">
+          <span class="brand__mark" aria-hidden="true"></span>
+          <span class="brand__name">M &amp; M Coach</span>
+        </div>
+
+        <nav class="footer-nav" aria-label="Footer">
+          <ul class="footer-nav__list">
+            <li><a href="privacy-policy.html" aria-current="page">Privacy Policy</a></li>
+            <li><a href="terms-of-use.html">Terms of Use</a></li>
+            <li><a href="support.html">Support</a></li>
+            <li><a href="support.html#contact-us">Contact</a></li>
+          </ul>
+        </nav>
+      </div>
+
+      <p class="site-footer__disclaimer">
+        M &amp; M Coach is an educational preparation tool. It does not
+        provide medical advice and does not replace clinical judgment,
+        institutional policy, or supervision.
+      </p>
+
+      <p class="site-footer__copyright">
+        &copy; <span id="current-year">2026</span> M &amp; M Coach. All rights reserved.
+      </p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

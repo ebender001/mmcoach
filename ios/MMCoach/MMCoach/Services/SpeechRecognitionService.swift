@@ -36,7 +36,7 @@ final class SpeechRecognitionService: ObservableObject {
         var errorDescription: String? {
             switch self {
             case .notAuthorized:
-                return "MMCoach needs microphone and speech recognition access to dictate. You can enable this in Settings, or type the case instead."
+                return "M & M Coach needs microphone and speech recognition access to dictate. You can enable this in Settings, or type the case instead."
             case .recognizerUnavailable:
                 return "Dictation isn't available right now. You can type the case instead."
             case .microphoneUnavailable:

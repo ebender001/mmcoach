@@ -33,5 +33,5 @@ struct ErrorView: View {
 }
 
 #Preview {
-    ErrorView(message: "MMCoach couldn't reach the server. Check your connection and try again.") {}
+    ErrorView(message: "M & M Coach couldn't reach the server. Check your connection and try again.") {}
 }

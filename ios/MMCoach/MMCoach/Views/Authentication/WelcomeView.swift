@@ -81,7 +81,7 @@ struct WelcomeView: View {
 
     private var header: some View {
         VStack(spacing: 4) {
-            Text("M&M Coach")
+            Text("M & M Coach")
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(.primary)
             Text("Case conference preparation")

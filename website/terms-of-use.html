@@ -1,0 +1,465 @@
+<!--
+  Drafted from this repository's actual product behavior (AI-assisted
+  case preparation via OpenAI, PubMed literature lookups, Parse/Back4App
+  accounts -- see backend/README.md). Governing law / venue is Missouri
+  (state whose law governs and exclusive dispute venue) per user
+  confirmation. Informal-dispute-resolution is the only mechanism
+  included -- no binding arbitration / class-action waiver clause,
+  left out on purpose since that's jurisdiction-sensitive and easy to
+  get wrong unreviewed; have counsel decide whether to add one. The
+  Apple-required minimum EULA terms (section 12) are Apple's own
+  standard language for a custom EULA -- keep that section if you
+  don't set a custom EULA in App Store Connect, or drop it and
+  reference the Apple standard EULA there instead if you do.
+
+  Section 8 (Subscriptions) describes the confirmed model -- first
+  case free, then an auto-renewing subscription for additional cases
+  -- and includes Apple's required auto-renewal disclosure language
+  (App Store Review Guideline 3.1.2). It deliberately does NOT state a
+  specific price or billing period (monthly/annual), since neither is
+  set yet in App Store Connect; fill those in once the subscription
+  product is configured, and make sure the in-app purchase screen's
+  disclosure text matches.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Terms of Use — M &amp; M Coach</title>
+  <meta name="description" content="The terms that govern your use of the M & M Coach app and website." />
+  <meta name="theme-color" content="#00274C" />
+  <meta name="robots" content="index, follow" />
+
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap site-header__inner">
+      <a class="brand" href="index.html" aria-label="M &amp; M Coach home">
+        <span class="brand__mark" aria-hidden="true"></span>
+        <span class="brand__name">M &amp; M Coach</span>
+      </a>
+
+      <button
+        class="nav-toggle"
+        type="button"
+        id="nav-toggle"
+        aria-expanded="false"
+        aria-controls="primary-nav"
+      >
+        <span class="nav-toggle__box">
+          <span class="nav-toggle__bar"></span>
+          <span class="nav-toggle__bar"></span>
+          <span class="nav-toggle__bar"></span>
+        </span>
+        <span class="visually-hidden">Menu</span>
+      </button>
+
+      <nav class="site-nav" id="primary-nav" aria-label="Primary">
+        <ul class="site-nav__list">
+          <li><a href="index.html#how-it-works">How It Works</a></li>
+          <li><a href="index.html#features">Features</a></li>
+          <li><a href="index.html#for-trainees">For Trainees</a></li>
+          <li><a href="support.html">Support</a></li>
+        </ul>
+        <a class="btn btn-primary btn-sm site-nav__cta" href="index.html#" data-placeholder="app-store">
+          Download on the App Store
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <article class="legal">
+      <div class="wrap legal__wrap">
+        <header class="legal__header">
+          <p class="legal__eyebrow">Legal</p>
+          <h1>Terms of Use</h1>
+          <p class="legal__updated">Last updated: August 20, 2026</p>
+          <p class="legal__intro">
+            These Terms of Use ("Terms") are a legal agreement between
+            you and Bender Apps, LLC ("M &amp; M Coach," "we," "us," or
+            "our") governing your access to and use of the M &amp; M
+            Coach iOS app (the "App") and this website (together, the
+            "Service"). By creating an account or otherwise using the
+            Service, you agree to these Terms. If you do not agree, do
+            not use the Service.
+          </p>
+        </header>
+
+        <nav class="legal__toc" aria-label="Table of contents">
+          <p class="legal__toc-title">On this page</p>
+          <ol>
+            <li><a href="#eligibility-and-accounts">Eligibility and accounts</a></li>
+            <li><a href="#the-service">The Service</a></li>
+            <li><a href="#your-content">Your content</a></li>
+            <li><a href="#patient-information">Patient information is prohibited</a></li>
+            <li><a href="#ai-generated-content">AI-generated content is not verified</a></li>
+            <li><a href="#not-medical-advice">Not medical advice; not HIPAA compliant</a></li>
+            <li><a href="#acceptable-use">Acceptable use</a></li>
+            <li><a href="#fees">Subscriptions</a></li>
+            <li><a href="#intellectual-property">Intellectual property</a></li>
+            <li><a href="#third-party-services">Third-party services</a></li>
+            <li><a href="#termination">Suspension and termination</a></li>
+            <li><a href="#apple-terms">App Store terms</a></li>
+            <li><a href="#disclaimers">Disclaimers</a></li>
+            <li><a href="#limitation-of-liability">Limitation of liability</a></li>
+            <li><a href="#indemnification">Indemnification</a></li>
+            <li><a href="#governing-law">Governing law and disputes</a></li>
+            <li><a href="#changes-to-terms">Changes to these Terms</a></li>
+            <li><a href="#general">General terms</a></li>
+            <li><a href="#contact-us">Contact us</a></li>
+          </ol>
+        </nav>
+
+        <section id="eligibility-and-accounts">
+          <h2>1. Eligibility and accounts</h2>
+          <p>
+            You must be at least 18 years old, and a healthcare
+            professional or trainee (or otherwise authorized to prepare
+            clinical case material), to use the Service. You are
+            responsible for maintaining the confidentiality of your
+            account credentials and for all activity under your
+            account. Notify us promptly at
+            <a href="mailto:support@benderapps.dev">support@benderapps.dev</a>
+            if you suspect unauthorized use of your account.
+          </p>
+        </section>
+
+        <section id="the-service">
+          <h2>2. The Service</h2>
+          <p>
+            M &amp; M Coach helps surgical trainees prepare cases for
+            morbidity and mortality (M&amp;M) conference: you describe
+            a case, answer focused follow-up questions, and the Service
+            uses artificial intelligence to help produce a polished
+            case narrative, discussion-preparation material, likely
+            faculty questions, and relevant published literature. The
+            Service is an educational preparation aid. You are solely
+            responsible for reviewing, verifying, and taking ownership
+            of anything you ultimately present at conference.
+          </p>
+        </section>
+
+        <section id="your-content">
+          <h2>3. Your content</h2>
+          <p>
+            "Your Content" means the case narratives, answers,
+            dictation, and any other material you submit through the
+            Service. You retain ownership of Your Content. By
+            submitting Your Content, you grant us a worldwide,
+            non-exclusive, royalty-free license to host, store,
+            reproduce, transmit, and process Your Content — including
+            sending it to the third-party service providers described
+            in our <a href="privacy-policy.html">Privacy Policy</a> —
+            solely to provide, maintain, and improve the Service to
+            you. You represent that you have the right to submit Your
+            Content and that doing so does not violate any law,
+            institutional policy, or a third party's rights.
+          </p>
+        </section>
+
+        <section id="patient-information">
+          <h2>4. Patient information is prohibited</h2>
+          <p>
+            <strong>You must not enter real patient identifiers</strong>
+            into the Service — including but not limited to names,
+            medical record numbers, exact dates, contact information,
+            or any other information that could identify a specific
+            patient, staff member, or institution. Use de-identified,
+            illustrative, or approximate details, consistent with your
+            institution's case-presentation norms.
+          </p>
+          <p>
+            The App includes an on-device, automated check intended to
+            catch obvious slips before text leaves your device; it is a
+            safety net, not a substitute for your own judgment, and it
+            cannot screen audio already sent for speech recognition
+            before it becomes text. See "Dictation and speech
+            recognition" in our
+            <a href="privacy-policy.html">Privacy Policy</a> for
+            details and limitations. Submitting real patient
+            identifiers is a violation of these Terms.
+          </p>
+        </section>
+
+        <section id="ai-generated-content">
+          <h2>5. AI-generated content is not verified</h2>
+          <p>
+            Case extraction, follow-up questions, the polished
+            narrative, discussion-preparation material, likely faculty
+            questions, and literature search results are generated
+            with the help of artificial intelligence and automated
+            literature search. AI-generated content, and the
+            literature results returned, <strong>may be incomplete,
+            inaccurate, out of date, or fabricated</strong>
+            (a known failure mode of large language models sometimes
+            called "hallucination"). We do not verify AI-generated
+            content or literature citations for accuracy. You are
+            solely responsible for independently reviewing, verifying,
+            and correcting any content before relying on it or
+            presenting it.
+          </p>
+        </section>
+
+        <section id="not-medical-advice">
+          <h2>6. Not medical advice; not HIPAA compliant</h2>
+          <p>
+            The Service is an educational preparation tool. It does not
+            provide medical advice and does not replace clinical
+            judgment, institutional policy, or supervision. M &amp; M
+            Coach is not represented or intended to be a HIPAA "covered
+            entity" or "business associate," and the Service is not
+            intended to be used to store or transmit protected health
+            information (PHI). See
+            <a href="#patient-information">Patient information is
+            prohibited</a> above.
+          </p>
+        </section>
+
+        <section id="acceptable-use">
+          <h2>7. Acceptable use</h2>
+          <p>You agree not to:</p>
+          <ul>
+            <li>Submit real patient identifiers or other protected health information.</li>
+            <li>Use the Service for any unlawful purpose or in violation of your institution's policies.</li>
+            <li>Attempt to reverse engineer, decompile, or extract the source code of the App, except as permitted by applicable law.</li>
+            <li>Interfere with, disrupt, overload, or attempt to circumvent security or rate limits on the Service.</li>
+            <li>Scrape, harvest, or systematically extract data from the Service.</li>
+            <li>Impersonate any person or misrepresent your affiliation with any person or institution.</li>
+            <li>Use the Service to generate content intended to harass, defame, or harm any real, identifiable individual.</li>
+          </ul>
+        </section>
+
+        <section id="fees">
+          <h2>8. Subscriptions</h2>
+          <p>
+            Your first complete case preparation is free. Preparing
+            additional cases requires an auto-renewing subscription
+            ("Subscription"), purchased through your Apple ID account.
+          </p>
+          <p>
+            Subscription plans, pricing, and billing period (for
+            example, monthly or annual) are shown in the App before
+            you purchase, and on the applicable App Store product
+            page. Payment is charged to your Apple ID account at
+            confirmation of purchase.
+          </p>
+          <p>
+            Your Subscription automatically renews for the same length
+            and price unless you turn off auto-renew at least 24 hours
+            before the end of the current period. Your Apple ID
+            account will be charged for renewal within 24 hours before
+            the end of the current period.
+          </p>
+          <p>
+            You can manage or cancel your Subscription, and turn off
+            auto-renewal, at any time in your device's Settings app
+            under your Apple ID &gt; Subscriptions. Canceling stops
+            future renewals but does not refund the current billing
+            period. Refunds for purchases made through the App Store
+            are handled by Apple, not us — see
+            <a href="#apple-terms">App Store terms</a> below.
+          </p>
+        </section>
+
+        <section id="intellectual-property">
+          <h2>9. Intellectual property</h2>
+          <p>
+            The Service, including its software, design, text, graphics,
+            and the "M &amp; M Coach" name and logo, is owned by
+            Bender Apps, LLC or its licensors and is protected by
+            intellectual property laws. Except for Your Content and the
+            limited license to use the Service granted by these Terms,
+            we reserve all rights, title, and interest in the Service.
+            You may not use our name, logo, or branding without our
+            prior written permission.
+          </p>
+        </section>
+
+        <section id="third-party-services">
+          <h2>10. Third-party services</h2>
+          <p>
+            The Service relies on third-party providers — including an
+            AI processing provider, our backend hosting provider, the
+            National Library of Medicine's PubMed service, and Apple —
+            described in our <a href="privacy-policy.html">Privacy
+            Policy</a>. We are not responsible for the availability,
+            accuracy, or content of these third-party services, which
+            are governed by their own terms.
+          </p>
+        </section>
+
+        <section id="termination">
+          <h2>11. Suspension and termination</h2>
+          <p>
+            You may stop using the Service at any time. We may suspend
+            or terminate your access to the Service if you violate
+            these Terms, including by submitting real patient
+            identifiers, or if we reasonably believe doing so is
+            necessary to protect the Service or other users. You may
+            request deletion of your account and associated data as
+            described in our <a href="privacy-policy.html">Privacy
+            Policy</a>.
+          </p>
+        </section>
+
+        <section id="apple-terms">
+          <h2>12. App Store terms</h2>
+          <p>
+            If you obtained the App from Apple's App Store, the
+            following additional terms apply and take precedence over
+            any conflicting term elsewhere in these Terms:
+          </p>
+          <ul>
+            <li>These Terms are between you and us only, not Apple, and Apple is not responsible for the Service or its content.</li>
+            <li>Apple has no obligation to furnish any maintenance or support services for the App.</li>
+            <li>In the event of any failure of the App to conform to any applicable warranty, you may notify Apple, and Apple will refund the purchase price (if any) for the App to you; to the maximum extent permitted by applicable law, Apple has no other warranty obligation with respect to the App.</li>
+            <li>Apple is not responsible for addressing any claims by you or a third party relating to the App, including product-liability claims, claims that the App fails to conform to legal or regulatory requirements, and claims arising under consumer-protection or similar legislation.</li>
+            <li>Apple is not responsible for the investigation, defense, settlement, or discharge of any claim that the App or your possession or use of it infringes a third party's intellectual property rights.</li>
+            <li>You represent that you are not located in a country subject to a U.S. Government embargo or designated as a "terrorist supporting" country, and that you are not on any U.S. Government list of prohibited or restricted parties.</li>
+            <li>You must comply with applicable third-party terms (for example, your wireless carrier's agreement) when using the App.</li>
+            <li>Apple, and Apple's subsidiaries, are third-party beneficiaries of these Terms, and upon your acceptance of these Terms, Apple will have the right (and will be deemed to have accepted the right) to enforce these Terms against you as a third-party beneficiary of these Terms.</li>
+          </ul>
+        </section>
+
+        <section id="disclaimers">
+          <h2>13. Disclaimers</h2>
+          <p>
+            THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE," WITHOUT
+            WARRANTIES OF ANY KIND, WHETHER EXPRESS, IMPLIED, OR
+            STATUTORY, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS
+            FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. WE DO
+            NOT WARRANT THAT THE SERVICE, OR ANY AI-GENERATED OR
+            LITERATURE-SEARCH CONTENT IT PRODUCES, WILL BE ACCURATE,
+            COMPLETE, RELIABLE, CURRENT, OR ERROR-FREE, OR THAT THE
+            SERVICE WILL BE UNINTERRUPTED OR SECURE.
+          </p>
+        </section>
+
+        <section id="limitation-of-liability">
+          <h2>14. Limitation of liability</h2>
+          <p>
+            TO THE MAXIMUM EXTENT PERMITTED BY LAW, WE WILL NOT BE
+            LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL,
+            OR PUNITIVE DAMAGES, OR ANY LOSS OF DATA, ARISING FROM OR
+            RELATED TO YOUR USE OF THE SERVICE, EVEN IF WE HAVE BEEN
+            ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. TO THE MAXIMUM
+            EXTENT PERMITTED BY LAW, OUR TOTAL LIABILITY FOR ANY CLAIM
+            ARISING FROM THESE TERMS OR THE SERVICE WILL NOT EXCEED THE
+            GREATER OF (A) THE AMOUNT YOU PAID US, IF ANY, IN THE 12
+            MONTHS BEFORE THE CLAIM AROSE, OR (B) 100 USD. SOME
+            JURISDICTIONS DO NOT ALLOW THESE LIMITATIONS, SO SOME OF THE
+            ABOVE MAY NOT APPLY TO YOU.
+          </p>
+        </section>
+
+        <section id="indemnification">
+          <h2>15. Indemnification</h2>
+          <p>
+            You agree to indemnify and hold us harmless from any claims,
+            losses, damages, and expenses (including reasonable
+            attorneys' fees) arising from your violation of these
+            Terms, your misuse of the Service, or Your Content —
+            including, without limitation, your submission of real
+            patient identifiers in violation of
+            <a href="#patient-information">Section 4</a>.
+          </p>
+        </section>
+
+        <section id="governing-law">
+          <h2>16. Governing law and disputes</h2>
+          <p>
+            These Terms are governed by the laws of the State of
+            Missouri, without regard to conflict-of-laws principles.
+            Before filing a claim against us, you agree to contact us
+            at
+            <a href="mailto:support@benderapps.dev">support@benderapps.dev</a>
+            and attempt to resolve the dispute informally. Any dispute
+            not resolved informally will be subject to the exclusive
+            jurisdiction of the state and federal courts located in
+            Missouri.
+          </p>
+        </section>
+
+        <section id="changes-to-terms">
+          <h2>17. Changes to these Terms</h2>
+          <p>
+            We may update these Terms from time to time. If we make
+            material changes, we will update the "Last updated" date
+            above and, where appropriate, provide additional notice
+            (such as an in-app notice). Your continued use of the
+            Service after a change becomes effective constitutes
+            acceptance of the revised Terms.
+          </p>
+        </section>
+
+        <section id="general">
+          <h2>18. General terms</h2>
+          <p>
+            If any provision of these Terms is found unenforceable, the
+            remaining provisions will remain in full effect. Our
+            failure to enforce any provision is not a waiver of it.
+            These Terms, together with our
+            <a href="privacy-policy.html">Privacy Policy</a>,
+            constitute the entire agreement between you and us
+            regarding the Service. You may not assign these Terms; we
+            may assign them in connection with a merger, acquisition,
+            or sale of assets.
+          </p>
+        </section>
+
+        <section id="contact-us">
+          <h2>19. Contact us</h2>
+          <p>
+            Questions about these Terms? Contact us at:
+          </p>
+          <p class="legal__contact">
+            <strong>Bender Apps, LLC</strong><br />
+            Email: <a href="mailto:support@benderapps.dev">support@benderapps.dev</a>
+          </p>
+        </section>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="site-footer__top">
+        <div class="brand brand--footer">
+          <span class="brand__mark" aria-hidden="true"></span>
+          <span class="brand__name">M &amp; M Coach</span>
+        </div>
+
+        <nav class="footer-nav" aria-label="Footer">
+          <ul class="footer-nav__list">
+            <li><a href="privacy-policy.html">Privacy Policy</a></li>
+            <li><a href="terms-of-use.html" aria-current="page">Terms of Use</a></li>
+            <li><a href="support.html">Support</a></li>
+            <li><a href="support.html#contact-us">Contact</a></li>
+          </ul>
+        </nav>
+      </div>
+
+      <p class="site-footer__disclaimer">
+        M &amp; M Coach is an educational preparation tool. It does not
+        provide medical advice and does not replace clinical judgment,
+        institutional policy, or supervision.
+      </p>
+
+      <p class="site-footer__copyright">
+        &copy; <span id="current-year">2026</span> M &amp; M Coach. All rights reserved.
+      </p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

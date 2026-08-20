@@ -34,7 +34,7 @@ enum AuthenticationServiceError: LocalizedError, Equatable {
         case .validation(let message):
             return message
         case .network:
-            return "MMCoach couldn't reach the server. Check your connection and try again."
+            return "M & M Coach couldn't reach the server. Check your connection and try again."
         case .server:
             return "Something went wrong. Please try again."
         }

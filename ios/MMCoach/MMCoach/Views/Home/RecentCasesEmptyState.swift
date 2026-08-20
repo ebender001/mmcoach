@@ -24,7 +24,7 @@ struct RecentCasesEmptyState: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.primary)
 
-                Text("Start with a brief case summary. M&M Coach will help you clarify the timeline, identify discussion points, and prepare for conference.")
+                Text("Start with a brief case summary. M & M Coach will help you clarify the timeline, identify discussion points, and prepare for conference.")
                     .font(.footnote)
                     .foregroundStyle(Color.slateText)
                     .fixedSize(horizontal: false, vertical: true)

@@ -44,9 +44,9 @@ enum BackendError: LocalizedError, Equatable {
         case .server:
             return "Something went wrong preparing your case. Please try again."
         case .network:
-            return "MMCoach couldn't reach the server. Check your connection and try again."
+            return "M & M Coach couldn't reach the server. Check your connection and try again."
         case .decoding:
-            return "MMCoach couldn't read the server's response. Please try again."
+            return "M & M Coach couldn't read the server's response. Please try again."
         }
     }
 

@@ -142,7 +142,7 @@ struct HomeView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("M&M Coach")
+            Text("M & M Coach")
                 .font(.title2.weight(.bold))
                 .foregroundStyle(.primary)
             Text("Case conference preparation")

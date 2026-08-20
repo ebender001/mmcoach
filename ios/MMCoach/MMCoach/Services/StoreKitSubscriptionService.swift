@@ -19,6 +19,18 @@ final class StoreKitSubscriptionService: SubscriptionService {
 
     private var productsByID: [String: Product] = [:]
     private var transactionListener: Task<Void, Never>?
+    /// Fast-path entitlement cache, populated *only* from verified StoreKit
+    /// signals this process has actually observed -- a purchase this
+    /// service itself completed, or an update from the `Transaction.updates`
+    /// listener (which also fires on renewals and revocations). This is
+    /// not a durable/persisted flag: it resets on relaunch, forcing a fresh
+    /// `Transaction.currentEntitlements` scan. It exists because that scan
+    /// can briefly lag behind a transaction finished moments earlier in
+    /// this same process -- without this, `hasActiveEntitlement()` called
+    /// immediately after a successful purchase (as PaywallViewModel does,
+    /// to decide whether to dismiss) can see stale state. `nil` means "not
+    /// yet known."
+    private var knownActiveEntitlement: Bool?
 
     private init() {
         // Catches transactions that complete outside purchase()'s own
@@ -64,6 +76,7 @@ final class StoreKitSubscriptionService: SubscriptionService {
         switch result {
         case .success(let verification):
             let transaction = try Self.checkVerified(verification)
+            recordKnownEntitlement(from: transaction)
             await transaction.finish()
             return .success
         case .userCancelled:
@@ -78,24 +91,44 @@ final class StoreKitSubscriptionService: SubscriptionService {
     func restorePurchases() async throws {
         do {
             try await AppStore.sync()
+            // Discard the cache rather than assume anything -- restore can
+            // reveal an entitlement this process never observed itself
+            // (or reveal that one is now gone), so the next
+            // hasActiveEntitlement() call should do a real scan.
+            knownActiveEntitlement = nil
         } catch {
             throw SubscriptionServiceError.network
         }
     }
 
     func hasActiveEntitlement() async -> Bool {
+        if let knownActiveEntitlement {
+            return knownActiveEntitlement
+        }
         for await result in Transaction.currentEntitlements {
             guard let transaction = try? Self.checkVerified(result) else { continue }
             if SubscriptionProductID.all.contains(transaction.productID), transaction.revocationDate == nil {
+                knownActiveEntitlement = true
                 return true
             }
         }
+        knownActiveEntitlement = false
         return false
     }
 
     private func finish(_ update: VerificationResult<Transaction>) async {
         guard let transaction = try? Self.checkVerified(update) else { return }
+        recordKnownEntitlement(from: transaction)
         await transaction.finish()
+    }
+
+    /// Updates the fast-path cache from a transaction StoreKit has already
+    /// verified for us -- a purchase this service just completed, or a
+    /// `Transaction.updates` delivery (renewal, revocation, refund).
+    /// Ignores transactions for products this app doesn't sell.
+    private func recordKnownEntitlement(from transaction: Transaction) {
+        guard SubscriptionProductID.all.contains(transaction.productID) else { return }
+        knownActiveEntitlement = transaction.revocationDate == nil
     }
 
     private static func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {

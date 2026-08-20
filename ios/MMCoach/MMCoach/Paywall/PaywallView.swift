@@ -71,8 +71,12 @@ struct PaywallView: View {
         .interactiveDismissDisabled(viewModel.isBusy)
         .task { await viewModel.load() }
         .onChange(of: viewModel.didUnlockAccess) { _, unlocked in
+            // Only notify the caller here -- don't call `dismiss()`
+            // ourselves. The caller flips the `isPresented` binding it
+            // owns (see HomeViewModel.paywallDidUnlockAccess()), which
+            // dismisses this sheet from the outside; calling `dismiss()`
+            // here too would race that same dismissal from both sides.
             guard unlocked else { return }
-            dismiss()
             onUnlocked()
         }
     }

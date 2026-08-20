@@ -15,6 +15,11 @@ final class HomeViewModel: ObservableObject {
     /// able to set this back to `false` too.
     @Published var isPresentingPaywall = false
     @Published private(set) var isCheckingCaseAccess = false
+    /// Set alongside `isPresentingPaywall = false` when the paywall closed
+    /// because access was unlocked (vs. the person swiping it away).
+    /// Consumed by `consumePaywallUnlock()` from the sheet's `onDismiss`,
+    /// once the dismissal has actually finished -- see HomeView.
+    private var didUnlockCaseAccessViaPaywall = false
 
     private let store: RecentCasesStore
     private let subscriptionService: SubscriptionService
@@ -60,9 +65,22 @@ final class HomeViewModel: ObservableObject {
     }
 
     /// Called once PaywallView confirms the person unlocked access
-    /// (purchase, restore, or the free case) -- dismisses the sheet so the
-    /// caller can push `.newCase`.
+    /// (purchase, restore, or the free case). Only flips the binding that
+    /// closes the sheet -- deliberately does NOT push `.newCase` itself.
+    /// Pushing here would race the sheet's own dismiss animation (both
+    /// mutating navigation state in the same tick); the push instead
+    /// happens from the sheet's `onDismiss`, once SwiftUI confirms the
+    /// dismissal actually completed (see HomeView, `consumePaywallUnlock()`).
     func paywallDidUnlockAccess() {
+        didUnlockCaseAccessViaPaywall = true
         isPresentingPaywall = false
+    }
+
+    /// Call from the paywall sheet's `onDismiss`. Returns whether the sheet
+    /// closed because access was unlocked (vs. a manual swipe-to-dismiss),
+    /// consuming the flag either way so it can't fire twice.
+    func consumePaywallUnlock() -> Bool {
+        defer { didUnlockCaseAccessViaPaywall = false }
+        return didUnlockCaseAccessViaPaywall
     }
 }

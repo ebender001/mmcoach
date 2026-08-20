@@ -88,9 +88,9 @@
         {
           "adHocOffers" : [],
           "codeOffers" : [],
-          "displayPrice" : "10.99",
+          "displayPrice" : "9.99",
           "familyShareable" : false,
-          "groupNumber" : 2,
+          "groupNumber" : 1,
           "internalID" : "9234630299FB4F63BCCEA7C388D4B23C",
           "introductoryOffer" : null,
           "localizations" : [

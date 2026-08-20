@@ -143,10 +143,16 @@ struct HomeView: View {
                     onSignOut?()
                 }
             }
-            .sheet(isPresented: $viewModel.isPresentingPaywall) {
+            .sheet(isPresented: $viewModel.isPresentingPaywall, onDismiss: {
+                // Runs after the sheet has actually finished closing, so
+                // this push never races the dismiss animation (see
+                // HomeViewModel.paywallDidUnlockAccess()).
+                if viewModel.consumePaywallUnlock() {
+                    path.append(.newCase)
+                }
+            }) {
                 PaywallView {
                     viewModel.paywallDidUnlockAccess()
-                    path.append(.newCase)
                 }
             }
         }

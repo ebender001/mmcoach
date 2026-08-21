@@ -202,7 +202,15 @@ final class AuthenticationViewModel: ObservableObject {
     /// and returns to the Welcome screen. Never touches case data --
     /// `RecentCasesStore` and any in-flight case on the backend are
     /// untouched.
+    ///
+    /// Moves to `.endingSession` *before* the network call (rather than
+    /// after, as `deleteAccount()` does) since sign-out can't meaningfully
+    /// fail from the UI's point of view -- there's nothing to stay on Home
+    /// for. This is what gives RootView a spinner to show immediately
+    /// instead of leaving Home visible and inert for however long the
+    /// logout call takes.
     func signOut() async {
+        state = .endingSession
         try? await authService.signOut()
         state = .signedOut
         sessionExpiredMessage = nil
@@ -210,11 +218,18 @@ final class AuthenticationViewModel: ObservableObject {
 
     /// Permanently deletes the signed-in account and its case data (App
     /// Store Review Guideline 5.1.1(v)), then returns to Welcome -- unlike
-    /// `signOut()`, a failure here is real and is re-thrown so the caller
-    /// (AccountView) can show it and let the person retry, rather than
-    /// silently pretending the account was deleted.
+    /// `signOut()`, a failure here is real, so the network call happens
+    /// *before* touching `state`: on failure, `state` never changes and
+    /// the caller (AccountView) stays on-screen to show the error and let
+    /// the person retry. Only a success moves to `.endingSession` for a
+    /// deliberate beat -- long enough for RootView's spinner to actually
+    /// be visible -- before `.signedOut`, so a successful deletion still
+    /// gets the same graceful transition as sign-out rather than an
+    /// instant cut away from Home.
     func deleteAccount() async throws {
         try await authService.deleteAccount()
+        state = .endingSession
+        try? await Task.sleep(for: .seconds(0.5))
         state = .signedOut
         sessionExpiredMessage = nil
     }
@@ -231,6 +246,7 @@ final class AuthenticationViewModel: ObservableObject {
     /// can never succeed with a dead session.
     private func handleSessionExpired() async {
         guard case .signedIn = state else { return }
+        state = .endingSession
         try? await authService.signOut()
         state = .signedOut
         sessionExpiredMessage = "Your session expired. Please sign in again."

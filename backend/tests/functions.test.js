@@ -19,7 +19,8 @@ require('../cloud/functions/createCase');
 require('../cloud/functions/answerQuestion');
 require('../cloud/functions/finalizeCase');
 require('../cloud/functions/getCase');
-require('../cloud/functions/getCaseCount');
+require('../cloud/functions/checkFreeCaseEligibility');
+require('../cloud/functions/redeemFreeCase');
 require('../cloud/functions/updatePolishedNarrative');
 require('../cloud/functions/getCaseAICost');
 require('../cloud/functions/findReferences');
@@ -204,21 +205,67 @@ describe('mmGetCase', () => {
   });
 });
 
-describe('mmGetCaseCount', () => {
+describe('mmCheckFreeCaseEligibility', () => {
   it('rejects an unauthenticated request without calling the service', async () => {
     await expect(
-      cloudRegistry.mmGetCaseCount({ params: {} })
+      cloudRegistry.mmCheckFreeCaseEligibility({ params: { deviceId: 'device1' } })
     ).rejects.toMatchObject({ code: Parse.Error.INVALID_SESSION_TOKEN });
-    expect(caseService.getCaseCount).not.toHaveBeenCalled();
+    expect(caseService.checkFreeCaseEligibility).not.toHaveBeenCalled();
   });
 
-  it('returns the caller\'s case count', async () => {
-    caseService.getCaseCount.mockResolvedValue({ caseCount: 3 });
+  it('rejects a missing deviceId', async () => {
+    await expect(
+      cloudRegistry.mmCheckFreeCaseEligibility({ params: {}, user: AUTH_USER })
+    ).rejects.toThrow();
+    expect(caseService.checkFreeCaseEligibility).not.toHaveBeenCalled();
+  });
 
-    const result = await cloudRegistry.mmGetCaseCount({ params: {}, user: AUTH_USER });
+  it('returns the caller\'s free-case eligibility for this device', async () => {
+    caseService.checkFreeCaseEligibility.mockResolvedValue({ eligible: true });
 
-    expect(caseService.getCaseCount).toHaveBeenCalledWith({ ownerId: 'user1' });
-    expect(result.caseCount).toBe(3);
+    const result = await cloudRegistry.mmCheckFreeCaseEligibility({
+      params: { deviceId: 'device1' },
+      user: AUTH_USER,
+    });
+
+    expect(caseService.checkFreeCaseEligibility).toHaveBeenCalledWith({ ownerId: 'user1', deviceId: 'device1' });
+    expect(result.eligible).toBe(true);
+  });
+});
+
+describe('mmRedeemFreeCase', () => {
+  it('rejects an unauthenticated request without calling the service', async () => {
+    await expect(
+      cloudRegistry.mmRedeemFreeCase({ params: { deviceId: 'device1' } })
+    ).rejects.toMatchObject({ code: Parse.Error.INVALID_SESSION_TOKEN });
+    expect(caseService.redeemFreeCase).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing deviceId', async () => {
+    await expect(
+      cloudRegistry.mmRedeemFreeCase({ params: {}, user: AUTH_USER })
+    ).rejects.toThrow();
+    expect(caseService.redeemFreeCase).not.toHaveBeenCalled();
+  });
+
+  it('redeems the free case for this account/device and confirms', async () => {
+    caseService.redeemFreeCase.mockResolvedValue(undefined);
+
+    const result = await cloudRegistry.mmRedeemFreeCase({
+      params: { deviceId: 'device1' },
+      user: AUTH_USER,
+    });
+
+    expect(caseService.redeemFreeCase).toHaveBeenCalledWith({ ownerId: 'user1', deviceId: 'device1' });
+    expect(result).toEqual({ redeemed: true });
+  });
+
+  it('propagates an invalid-state error when no free case is available', async () => {
+    caseService.redeemFreeCase.mockRejectedValue(new InvalidStateError('A free case is not available for this account.'));
+
+    await expect(
+      cloudRegistry.mmRedeemFreeCase({ params: { deviceId: 'device1' }, user: AUTH_USER })
+    ).rejects.toMatchObject({ code: Parse.Error.OPERATION_FORBIDDEN });
   });
 });
 

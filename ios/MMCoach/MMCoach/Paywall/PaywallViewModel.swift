@@ -16,6 +16,10 @@ enum PaywallState: Equatable {
     case ready
     case purchasing(productID: String)
     case restoring
+    /// Redeeming "Continue with Your Free Case" -- a real network call
+    /// (see BackendService.redeemFreeCase), not an instant local flag
+    /// flip, so it needs its own busy state like purchasing/restoring do.
+    case redeemingFreeCase
     /// Also covers a `loadPlans()` failure (see `load()`) -- from the
     /// trainee's point of view, "plans didn't load" and "a purchase
     /// failed" both mean "nothing was purchased, here's why, try again."
@@ -52,7 +56,7 @@ final class PaywallViewModel: ObservableObject {
 
     var isBusy: Bool {
         switch state {
-        case .purchasing, .restoring:
+        case .purchasing, .restoring, .redeemingFreeCase:
             return true
         case .loadingProducts, .ready, .purchaseFailed, .restoreFailed:
             return false
@@ -60,12 +64,19 @@ final class PaywallViewModel: ObservableObject {
     }
 
     private let subscriptionService: SubscriptionService
-    private let fetchCaseCount: () async throws -> Int
+    private let fetchFreeCaseEligibility: () async throws -> Bool
+    private let redeemFreeCase: () async throws -> Void
 
     init(subscriptionService: SubscriptionService? = nil,
-         fetchCaseCount: @escaping () async throws -> Int = { try await BackendService.getCaseCount() }) {
+         fetchFreeCaseEligibility: @escaping () async throws -> Bool = {
+             try await BackendService.checkFreeCaseEligibility(deviceId: DeviceIdentifierService.current())
+         },
+         redeemFreeCase: @escaping () async throws -> Void = {
+             try await BackendService.redeemFreeCase(deviceId: DeviceIdentifierService.current())
+         }) {
         self.subscriptionService = subscriptionService ?? StoreKitSubscriptionService.shared
-        self.fetchCaseCount = fetchCaseCount
+        self.fetchFreeCaseEligibility = fetchFreeCaseEligibility
+        self.redeemFreeCase = redeemFreeCase
     }
 
     /// Loads plans and the free-case eligibility check together. Call once
@@ -118,10 +129,25 @@ final class PaywallViewModel: ObservableObject {
 
     /// Only valid when `freeCaseEligibility == .eligible` -- the view only
     /// shows this action in that state, but guard here too since this is
-    /// the actual access decision.
-    func continueWithFreeCase() {
-        guard freeCaseEligibility == .eligible else { return }
-        didUnlockAccess = true
+    /// the actual access decision. Calls the backend to atomically
+    /// re-validate and record the redemption (see
+    /// BackendService.redeemFreeCase) rather than trusting the earlier
+    /// eligibility check alone -- that check only decided whether to
+    /// *show* this button, not whether it's still safe to grant.
+    func continueWithFreeCase() async {
+        guard freeCaseEligibility == .eligible, !isBusy else { return }
+        state = .redeemingFreeCase
+        do {
+            try await redeemFreeCase()
+            didUnlockAccess = true
+            state = .ready
+        } catch {
+            state = .purchaseFailed(message: Self.message(for: error))
+            // The backend just said this account/device is no longer
+            // eligible (or the check itself failed) -- refresh so a
+            // stale "Continue with Your Free Case" button doesn't linger.
+            await loadFreeCaseEligibility()
+        }
     }
 
     private func loadPlans() async {
@@ -135,11 +161,11 @@ final class PaywallViewModel: ObservableObject {
 
     private func loadFreeCaseEligibility() async {
         do {
-            let count = try await fetchCaseCount()
-            freeCaseEligibility = count == 0 ? .eligible : .notEligible
+            let eligible = try await fetchFreeCaseEligibility()
+            freeCaseEligibility = eligible ? .eligible : .notEligible
         } catch {
-            // Fail closed: if the backend can't confirm zero cases, don't
-            // offer the free-case path. Subscribing/restoring are
+            // Fail closed: if the backend can't confirm eligibility,
+            // don't offer the free-case path. Subscribing/restoring are
             // unaffected by this failure.
             freeCaseEligibility = .notEligible
         }

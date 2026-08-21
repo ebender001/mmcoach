@@ -184,10 +184,16 @@ struct PaywallView: View {
                 .foregroundStyle(.primary)
 
             Button {
-                viewModel.continueWithFreeCase()
+                Task { await viewModel.continueWithFreeCase() }
             } label: {
-                Text("Continue with Your Free Case")
-                    .frame(maxWidth: .infinity)
+                HStack {
+                    if viewModel.state == .redeemingFreeCase {
+                        ProgressView()
+                    } else {
+                        Text("Continue with Your Free Case")
+                    }
+                }
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.michiganBordered)
             .disabled(viewModel.isBusy)
@@ -254,7 +260,8 @@ struct PaywallView: View {
             PaywallView(
                 viewModel: PaywallViewModel(
                     subscriptionService: PreviewSubscriptionService(),
-                    fetchCaseCount: { 0 }
+                    fetchFreeCaseEligibility: { true },
+                    redeemFreeCase: {}
                 ),
                 onUnlocked: {}
             )
@@ -267,7 +274,8 @@ struct PaywallView: View {
             PaywallView(
                 viewModel: PaywallViewModel(
                     subscriptionService: PreviewSubscriptionService(),
-                    fetchCaseCount: { 2 }
+                    fetchFreeCaseEligibility: { false },
+                    redeemFreeCase: {}
                 ),
                 onUnlocked: {}
             )
@@ -280,7 +288,8 @@ struct PaywallView: View {
             PaywallView(
                 viewModel: PaywallViewModel(
                     subscriptionService: PreviewSubscriptionService(delay: .seconds(120)),
-                    fetchCaseCount: { 0 }
+                    fetchFreeCaseEligibility: { true },
+                    redeemFreeCase: {}
                 ),
                 onUnlocked: {}
             )
@@ -293,20 +302,36 @@ struct PaywallView: View {
             PaywallView(
                 viewModel: PaywallViewModel(
                     subscriptionService: PreviewSubscriptionService(plansResult: .failure(SubscriptionServiceError.productsUnavailable)),
-                    fetchCaseCount: { 0 }
+                    fetchFreeCaseEligibility: { true },
+                    redeemFreeCase: {}
                 ),
                 onUnlocked: {}
             )
         }
 }
 
-#Preview("Backend case-count failure (fails closed)") {
+#Preview("Backend eligibility check failure (fails closed)") {
     Color.warmBackground
         .sheet(isPresented: .constant(true)) {
             PaywallView(
                 viewModel: PaywallViewModel(
                     subscriptionService: PreviewSubscriptionService(),
-                    fetchCaseCount: { throw BackendError.network }
+                    fetchFreeCaseEligibility: { throw BackendError.network },
+                    redeemFreeCase: {}
+                ),
+                onUnlocked: {}
+            )
+        }
+}
+
+#Preview("Redeeming free case fails") {
+    Color.warmBackground
+        .sheet(isPresented: .constant(true)) {
+            PaywallView(
+                viewModel: PaywallViewModel(
+                    subscriptionService: PreviewSubscriptionService(),
+                    fetchFreeCaseEligibility: { true },
+                    redeemFreeCase: { throw BackendError.invalidState("A free case is not available for this account.") }
                 ),
                 onUnlocked: {}
             )
@@ -319,7 +344,8 @@ struct PaywallView: View {
             PaywallView(
                 viewModel: PaywallViewModel(
                     subscriptionService: PreviewSubscriptionService(),
-                    fetchCaseCount: { 0 }
+                    fetchFreeCaseEligibility: { true },
+                    redeemFreeCase: {}
                 ),
                 onUnlocked: {}
             )

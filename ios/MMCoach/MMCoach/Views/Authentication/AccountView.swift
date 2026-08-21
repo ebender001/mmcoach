@@ -4,7 +4,8 @@
 //
 //  The account area: who's signed in, subscription management, sign out,
 //  and account deletion. Presented as a sheet from HomeView's toolbar (see
-//  HomeView's account button).
+//  HomeView's account button). Styled like Home's own cards
+//  (.polishedCard(), warmBackground) rather than a plain system list.
 //
 
 import StoreKit
@@ -14,8 +15,8 @@ struct AccountView: View {
     let user: AuthenticatedUser?
     /// Optional so `AccountView(user:onSignOut:)` keeps working unchanged
     /// in previews/tests and any caller that doesn't wire up deletion --
-    /// the section below is hidden entirely when this is `nil`, the same
-    /// way HomeView gates its account button on `onSignOut` being present.
+    /// the card below is hidden entirely when this is `nil`, the same way
+    /// HomeView gates its account button on `onSignOut` being present.
     let onDeleteAccount: (() async throws -> Void)?
     let onSignOut: () -> Void
 
@@ -28,96 +29,20 @@ struct AccountView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("Account") {
-                    LabeledContent("Signed in with") {
-                        Label(signInMethodText, systemImage: signInMethodIcon)
-                    }
-                    if let email = user?.email {
-                        LabeledContent("Email", value: email)
+            ScrollView {
+                VStack(spacing: 20) {
+                    profileHeader
+                    actionsCard
+
+                    if let onDeleteAccount {
+                        deleteAccountCard(onDeleteAccount)
                     }
                 }
-
-                Section {
-                    Button {
-                        isPresentingManageSubscriptions = true
-                    } label: {
-                        Label("Manage Subscription", systemImage: "creditcard")
-                    }
-                } footer: {
-                    // Apple owns auto-renewal/cancellation -- this only
-                    // opens Apple's own subscription-management UI, never
-                    // a manual "renew" control of our own.
-                    Text("Opens Apple's subscription management, where you can view, change, or cancel your M & M Coach subscription.")
-                }
-
-                Section {
-                    Button(role: .destructive) {
-                        signOut()
-                    } label: {
-                        HStack {
-                            Text("Sign Out")
-                            if isSigningOut {
-                                Spacer()
-                                ProgressView()
-                            }
-                        }
-                    }
-                    .disabled(isSigningOut)
-                }
-
-                if let onDeleteAccount {
-                    Section {
-                        Button(role: .destructive) {
-                            isPresentingDeleteConfirmation = true
-                        } label: {
-                            HStack {
-                                Text("Delete Account")
-                                if isDeletingAccount {
-                                    Spacer()
-                                    ProgressView()
-                                }
-                            }
-                        }
-                        .disabled(isDeletingAccount)
-
-                        if let deleteAccountErrorMessage {
-                            Text(deleteAccountErrorMessage)
-                                .font(.footnote)
-                                .foregroundStyle(.red)
-                        }
-                    } footer: {
-                        Text("Permanently deletes your account and every case you've prepared. This cannot be undone. It does not cancel an active subscription -- see Manage Subscription above.")
-                    }
-                    .confirmationDialog(
-                        "Delete your account?",
-                        isPresented: $isPresentingDeleteConfirmation,
-                        titleVisibility: .visible
-                    ) {
-                        Button("Delete Account", role: .destructive) {
-                            deleteAccount(using: onDeleteAccount)
-                        }
-                        // Apple owns subscriptions -- we have no way to
-                        // cancel one on the person's behalf, so deleting
-                        // the account here would otherwise silently leave
-                        // them still being billed with no account left to
-                        // use. This gives them a way out of the dialog
-                        // straight into Manage Subscription instead.
-                        Button("Manage Subscription First") {
-                            isPresentingManageSubscriptions = true
-                        }
-                        Button("Cancel", role: .cancel) {}
-                    } message: {
-                        Text("This permanently deletes your account and every case you've prepared. It does not cancel any active subscription -- Apple will continue to bill you unless you cancel that separately. This cannot be undone.")
-                    }
-                }
-
-                Section {
-                    Text("Do not include patient identifiers.")
-                        .font(.caption)
-                        .foregroundStyle(Color.slateText)
-                }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 24)
             }
+            .background(Color.warmBackground)
             .navigationTitle("Account")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -127,6 +52,124 @@ struct AccountView: View {
             }
             .manageSubscriptionsSheet(isPresented: $isPresentingManageSubscriptions)
         }
+    }
+
+    private var profileHeader: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(Color.mutedTeal.opacity(0.14))
+                    .frame(width: 72, height: 72)
+                Image(systemName: signInMethodIcon)
+                    .font(.system(size: 28, weight: .medium))
+                    .foregroundStyle(Color.mutedTeal)
+            }
+            .accessibilityHidden(true)
+
+            VStack(spacing: 2) {
+                if let email = user?.email {
+                    Text(email)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                }
+                Text("Signed in with \(signInMethodText)")
+                    .font(.footnote)
+                    .foregroundStyle(Color.slateText)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 8)
+    }
+
+    private var actionsCard: some View {
+        VStack(spacing: 0) {
+            settingsRow(icon: "creditcard", title: "Manage Subscription") {
+                isPresentingManageSubscriptions = true
+            }
+
+            Divider().overlay(Color.primary.opacity(0.06))
+
+            settingsRow(icon: "rectangle.portrait.and.arrow.right", title: "Sign Out", isDestructive: true, isBusy: isSigningOut) {
+                signOut()
+            }
+        }
+        .polishedCard()
+    }
+
+    private func deleteAccountCard(_ action: @escaping () async throws -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            settingsRow(icon: "trash", title: "Delete Account", isDestructive: true, isBusy: isDeletingAccount) {
+                isPresentingDeleteConfirmation = true
+            }
+
+            if let deleteAccountErrorMessage {
+                Text(deleteAccountErrorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+
+            Text("Permanently deletes your account and every case you've prepared. This cannot be undone. It does not cancel an active subscription -- see Manage Subscription above.")
+                .font(.caption)
+                .foregroundStyle(Color.slateText)
+        }
+        .polishedCard()
+        .confirmationDialog(
+            "Delete your account?",
+            isPresented: $isPresentingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Account", role: .destructive) {
+                deleteAccount(using: action)
+            }
+            // Apple owns subscriptions -- we have no way to cancel one on
+            // the person's behalf, so deleting the account here would
+            // otherwise silently leave them still being billed with no
+            // account left to use. This gives them a way out of the
+            // dialog straight into Manage Subscription instead.
+            Button("Manage Subscription First") {
+                isPresentingManageSubscriptions = true
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes your account and every case you've prepared. It does not cancel any active subscription -- Apple will continue to bill you unless you cancel that separately. This cannot be undone.")
+        }
+    }
+
+    /// One tappable row inside a `.polishedCard()` -- an icon, a title,
+    /// and either a busy spinner or a chevron (chevron omitted for
+    /// destructive rows, which don't push to another screen).
+    private func settingsRow(icon: String,
+                              title: String,
+                              isDestructive: Bool = false,
+                              isBusy: Bool = false,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(isDestructive ? Color.red : Color.michiganBlueText)
+                    .frame(width: 26, height: 26)
+
+                Text(title)
+                    .font(.body)
+                    .foregroundStyle(isDestructive ? Color.red : .primary)
+
+                Spacer(minLength: 0)
+
+                if isBusy {
+                    ProgressView()
+                } else if !isDestructive {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.slateText.opacity(0.6))
+                }
+            }
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
     }
 
     private var signInMethodText: String {

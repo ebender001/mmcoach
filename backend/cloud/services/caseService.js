@@ -6,6 +6,7 @@
  */
 const caseRepository = require('../repositories/caseRepository');
 const aiCostRepository = require('../repositories/aiCostRepository');
+const deviceRedemptionRepository = require('../repositories/deviceRedemptionRepository');
 const caseAnalyzer = require('../ai/caseAnalyzer');
 const questionGenerator = require('../ai/questionGenerator');
 const finalizer = require('../ai/finalizer');
@@ -215,13 +216,34 @@ async function getCase({ caseId, ownerId }) {
 }
 
 /**
- * Number of cases the caller owns, regardless of status. Drives the
- * paywall's first-case-free decision -- the client never decides this from
- * a local cache.
+ * Whether a free first case is available: the account owns zero cases AND
+ * this device has never redeemed one before (even under a different,
+ * possibly-deleted account -- see deviceRedemptionRepository). The client
+ * never decides this itself from a local cache or a bare case count.
  */
-async function getCaseCount({ ownerId }) {
-  const caseCount = await caseRepository.countByOwner(ownerId);
-  return { caseCount };
+async function checkFreeCaseEligibility({ ownerId, deviceId }) {
+  const [caseCount, deviceAlreadyRedeemed] = await Promise.all([
+    caseRepository.countByOwner(ownerId),
+    deviceRedemptionRepository.hasRedeemed(deviceId),
+  ]);
+  return { eligible: caseCount === 0 && !deviceAlreadyRedeemed };
+}
+
+/**
+ * Atomically re-checks eligibility and, if still eligible, records this
+ * device as having redeemed its free case. Called only at the moment the
+ * trainee actually taps "Continue with Your Free Case" -- re-checking
+ * here (rather than trusting an earlier checkFreeCaseEligibility call)
+ * closes the race between that check and this action. Throws
+ * InvalidStateError if the device/account is no longer eligible (e.g. a
+ * stale paywall, or a concurrent redemption from another session).
+ */
+async function redeemFreeCase({ ownerId, deviceId }) {
+  const { eligible } = await checkFreeCaseEligibility({ ownerId, deviceId });
+  if (!eligible) {
+    throw new InvalidStateError('A free case is not available for this account.');
+  }
+  await deviceRedemptionRepository.recordRedemption(deviceId);
 }
 
 /**
@@ -300,7 +322,8 @@ module.exports = {
   answerQuestion,
   finalizeCase,
   getCase,
-  getCaseCount,
+  checkFreeCaseEligibility,
+  redeemFreeCase,
   updatePolishedNarrative,
   getCaseAICost,
   recordAIUsage,

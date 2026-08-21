@@ -28,6 +28,12 @@ struct AuthenticatedUser: Equatable {
 enum AuthenticationState: Equatable {
     /// The app hasn't yet checked whether a persisted session exists.
     case checkingSession
+    /// Signing out or deleting the account is in progress -- shown
+    /// between `.signedIn` and `.signedOut` so that transition has a
+    /// visible in-between state (a spinner) rather than either freezing
+    /// on Home during the network call or cutting straight to Welcome.
+    /// See `AuthenticationViewModel.signOut()`/`deleteAccount()`.
+    case endingSession
     case signedOut
     case signedIn(AuthenticatedUser)
 }

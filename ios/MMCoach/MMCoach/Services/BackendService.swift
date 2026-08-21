@@ -95,12 +95,26 @@ enum BackendService {
         try await run(GetCaseFunction(caseId: caseId))
     }
 
-    /// Number of cases the signed-in user owns, regardless of status --
-    /// the backend-sourced truth behind the paywall's first-case-free
-    /// decision. Never derive this from `RecentCasesStore` (a local,
-    /// per-device cache) or any other on-device count.
-    static func getCaseCount() async throws -> Int {
-        try await run(GetCaseCountFunction()).caseCount
+    /// Whether a free first case is available -- true only if this
+    /// account owns zero cases AND this device (see
+    /// `DeviceIdentifierService`) has never redeemed one before, even
+    /// under a different/deleted account. Never derive this from
+    /// `RecentCasesStore` (a local, per-device case cache) or any other
+    /// on-device signal.
+    static func checkFreeCaseEligibility(deviceId: String) async throws -> Bool {
+        try await run(CheckFreeCaseEligibilityFunction(deviceId: deviceId)).eligible
+    }
+
+    /// Marks this device as having redeemed its free first case.
+    /// Deliberately separate from the eligibility check above -- call
+    /// this only at the moment the trainee actually taps "Continue with
+    /// Your Free Case", not when merely checking whether to show that
+    /// option, so a person who never uses the free case never burns it.
+    /// The backend re-validates eligibility atomically and throws
+    /// `BackendError.invalidState` if it's no longer available (e.g. a
+    /// stale paywall).
+    static func redeemFreeCase(deviceId: String) async throws {
+        _ = try await run(RedeemFreeCaseFunction(deviceId: deviceId))
     }
 
     /// Overwrites the polished narrative on an already-finalized case.
@@ -185,13 +199,24 @@ private struct GetCaseFunction: ParseCloudable {
     var caseId: String
 }
 
-private struct CaseCountResponse: Decodable {
-    let caseCount: Int
+private struct FreeCaseEligibilityResponse: Decodable {
+    let eligible: Bool
 }
 
-private struct GetCaseCountFunction: ParseCloudable {
-    typealias ReturnType = CaseCountResponse
-    var functionJobName = "mmGetCaseCount"
+private struct CheckFreeCaseEligibilityFunction: ParseCloudable {
+    typealias ReturnType = FreeCaseEligibilityResponse
+    var functionJobName = "mmCheckFreeCaseEligibility"
+    var deviceId: String
+}
+
+private struct RedeemFreeCaseResponse: Decodable {
+    let redeemed: Bool
+}
+
+private struct RedeemFreeCaseFunction: ParseCloudable {
+    typealias ReturnType = RedeemFreeCaseResponse
+    var functionJobName = "mmRedeemFreeCase"
+    var deviceId: String
 }
 
 private struct UpdatePolishedNarrativeFunction: ParseCloudable {

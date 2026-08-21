@@ -17,11 +17,12 @@ struct RootView: View {
     /// that's already seen it (see the `.signedOut` case below, which
     /// only shows OnboardingView while this is still `false`).
     @AppStorage("MMCoach.hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
             switch authViewModel.state {
-            case .checkingSession:
+            case .checkingSession, .endingSession:
                 loadingView
             case .signedOut:
                 if hasCompletedOnboarding {
@@ -39,6 +40,13 @@ struct RootView: View {
                 })
             }
         }
+        // Without this, switching between the cases above (e.g. Home ->
+        // the .endingSession spinner -> Welcome on sign-out) is an
+        // instant cut -- SwiftUI has no reason to animate a plain
+        // `switch` on its own. This crossfades every state change,
+        // including sign-in and the initial checkingSession -> Welcome
+        // launch transition, not just sign-out.
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: authViewModel.state)
         .task { await authViewModel.refreshSession() }
     }
 

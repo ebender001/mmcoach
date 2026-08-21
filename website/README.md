@@ -66,8 +66,8 @@ leave the Build command blank.
   Fill those in once the subscription product is configured in App
   Store Connect, and make sure the in-app purchase screen's own
   disclosure text matches this page.
-- **Apple also requires in-app account deletion** (App Store Review
-  Guideline 5.1.1(v)) for any app with account creation. The iOS app
-  does not yet implement this -- it's a separate, required piece of
-  work before this policy's account-deletion section reflects an
-  actual in-app flow rather than a "contact us" request.
+- The iOS app now supports in-app account deletion (Account →
+  "Delete Account", App Store Review Guideline 5.1.1(v)) — permanently
+  deletes the account and all of its cases via `mmDeleteAccount`.
+  `privacy-policy.html`'s account-deletion section still only describes
+  the "contact us" path; update it to mention the in-app option too.

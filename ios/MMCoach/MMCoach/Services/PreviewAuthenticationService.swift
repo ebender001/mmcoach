@@ -22,6 +22,7 @@ struct PreviewAuthenticationService: AuthenticationService {
     var signInWithAppleResult: Result<AuthenticatedUser, Error> = .success(.preview)
     var passwordResetError: Error?
     var signOutError: Error?
+    var deleteAccountError: Error?
 
     func currentUser() -> AuthenticatedUser? { currentUserResult }
 
@@ -43,6 +44,10 @@ struct PreviewAuthenticationService: AuthenticationService {
 
     func signOut() async throws {
         if let signOutError { throw signOutError }
+    }
+
+    func deleteAccount() async throws {
+        if let deleteAccountError { throw deleteAccountError }
     }
 }
 

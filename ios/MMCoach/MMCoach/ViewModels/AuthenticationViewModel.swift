@@ -208,6 +208,17 @@ final class AuthenticationViewModel: ObservableObject {
         sessionExpiredMessage = nil
     }
 
+    /// Permanently deletes the signed-in account and its case data (App
+    /// Store Review Guideline 5.1.1(v)), then returns to Welcome -- unlike
+    /// `signOut()`, a failure here is real and is re-thrown so the caller
+    /// (AccountView) can show it and let the person retry, rather than
+    /// silently pretending the account was deleted.
+    func deleteAccount() async throws {
+        try await authService.deleteAccount()
+        state = .signedOut
+        sessionExpiredMessage = nil
+    }
+
     /// There is no way to silently obtain a new session without the
     /// person re-authenticating -- Parse never gives the client a stored
     /// password to replay, and Apple doesn't hand out a fresh identity

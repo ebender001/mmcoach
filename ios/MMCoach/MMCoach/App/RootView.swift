@@ -32,9 +32,11 @@ struct RootView: View {
                     }
                 }
             case .signedIn(let user):
-                HomeView(currentUser: user) {
+                HomeView(currentUser: user, onSignOut: {
                     Task { await authViewModel.signOut() }
-                }
+                }, onDeleteAccount: {
+                    try await authViewModel.deleteAccount()
+                })
             }
         }
         .task { await authViewModel.refreshSession() }

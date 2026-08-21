@@ -16,22 +16,31 @@ struct HomeView: View {
     @State private var path: [AppRoute] = []
     @State private var isPresentingAccount = false
 
-    /// The signed-in user and a sign-out action, both supplied by
-    /// `RootView`. Optional (rather than a required non-Optional
-    /// `AuthenticatedUser`) so `HomeView()` keeps working unchanged in
-    /// previews/tests that don't care about the account area.
+    /// The signed-in user, a sign-out action, and an account-deletion
+    /// action, all supplied by `RootView`. Optional (rather than a
+    /// required non-Optional `AuthenticatedUser`) so `HomeView()` keeps
+    /// working unchanged in previews/tests that don't care about the
+    /// account area.
     private let currentUser: AuthenticatedUser?
     private let onSignOut: (() -> Void)?
+    private let onDeleteAccount: (() async throws -> Void)?
 
-    init(currentUser: AuthenticatedUser? = nil, onSignOut: (() -> Void)? = nil) {
+    init(currentUser: AuthenticatedUser? = nil,
+         onSignOut: (() -> Void)? = nil,
+         onDeleteAccount: (() async throws -> Void)? = nil) {
         self.currentUser = currentUser
         self.onSignOut = onSignOut
+        self.onDeleteAccount = onDeleteAccount
         _viewModel = StateObject(wrappedValue: HomeViewModel())
     }
 
-    init(currentUser: AuthenticatedUser? = nil, onSignOut: (() -> Void)? = nil, viewModel: HomeViewModel) {
+    init(currentUser: AuthenticatedUser? = nil,
+         onSignOut: (() -> Void)? = nil,
+         onDeleteAccount: (() async throws -> Void)? = nil,
+         viewModel: HomeViewModel) {
         self.currentUser = currentUser
         self.onSignOut = onSignOut
+        self.onDeleteAccount = onDeleteAccount
         _viewModel = StateObject(wrappedValue: viewModel)
     }
 
@@ -138,7 +147,7 @@ struct HomeView: View {
                 }
             }
             .sheet(isPresented: $isPresentingAccount) {
-                AccountView(user: currentUser) {
+                AccountView(user: currentUser, onDeleteAccount: onDeleteAccount) {
                     isPresentingAccount = false
                     onSignOut?()
                 }

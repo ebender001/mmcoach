@@ -129,4 +129,31 @@ async function countByOwner(ownerId) {
   return query.count({ useMasterKey: true });
 }
 
-module.exports = { create, getById, update, incrementAIUsage, countByOwner, toClientJSON, CASE_CLASS_NAME };
+/**
+ * Permanently removes every case a user owns -- part of account deletion
+ * (see services/accountService.js). Does not touch MMCaseAICost rows;
+ * the caller is responsible for also clearing those via
+ * aiCostRepository.deleteAllForOwner, since this module never touches
+ * that class.
+ */
+async function deleteAllForOwner(ownerId) {
+  const MMCase = getMMCaseClass();
+  const query = new Parse.Query(MMCase);
+  query.equalTo('owner', Parse.User.createWithoutData(ownerId));
+  query.limit(1000);
+  const cases = await query.find({ useMasterKey: true });
+  if (cases.length > 0) {
+    await Parse.Object.destroyAll(cases, { useMasterKey: true });
+  }
+}
+
+module.exports = {
+  create,
+  getById,
+  update,
+  incrementAIUsage,
+  countByOwner,
+  deleteAllForOwner,
+  toClientJSON,
+  CASE_CLASS_NAME,
+};

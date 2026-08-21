@@ -12,3 +12,4 @@ require('./functions/updatePolishedNarrative');
 require('./functions/getCaseAICost');
 require('./functions/findReferences');
 require('./functions/correctDictation');
+require('./functions/deleteAccount');

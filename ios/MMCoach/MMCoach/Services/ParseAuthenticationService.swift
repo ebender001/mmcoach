@@ -103,6 +103,22 @@ struct ParseAuthenticationService: AuthenticationService {
         }
     }
 
+    func deleteAccount() async throws {
+        do {
+            try await BackendService.deleteAccount()
+        } catch let error as BackendError {
+            throw map(error)
+        } catch {
+            throw AuthenticationServiceError.network
+        }
+        // The Parse User no longer exists server-side once the call above
+        // succeeds, so there's no remote session left to invalidate --
+        // this only clears the locally cached Keychain session. Best-effort:
+        // the account is already gone regardless of whether this succeeds,
+        // so a failure here must never be surfaced as a deletion failure.
+        try? await User.logout()
+    }
+
     private func isNetworkFailure(_ error: ParseError) -> Bool {
         error.code == .connectionFailed || error.code == .timeout
     }
@@ -121,6 +137,17 @@ struct ParseAuthenticationService: AuthenticationService {
         case .connectionFailed, .timeout:
             return .network
         default:
+            return .server
+        }
+    }
+
+    private func map(_ error: BackendError) -> AuthenticationServiceError {
+        switch error {
+        case .network:
+            return .network
+        case .validation(let message):
+            return .validation(message)
+        case .notFound, .invalidState, .sessionExpired, .server, .decoding:
             return .server
         }
     }

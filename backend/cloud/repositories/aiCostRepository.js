@@ -81,4 +81,21 @@ async function listForCase(caseId) {
   return rows.map(toClientJSON);
 }
 
-module.exports = { record, listForCase, CLASS_NAME: AI_COST_CLASS_NAME };
+/**
+ * Permanently removes every AI-cost row for a user -- part of account
+ * deletion (see services/accountService.js). Queried by `owner` directly
+ * rather than by first listing the user's case ids, since every row
+ * already carries its own owner pointer (see `record()` above).
+ */
+async function deleteAllForOwner(ownerId) {
+  const AICost = getAICostClass();
+  const query = new Parse.Query(AICost);
+  query.equalTo('owner', Parse.User.createWithoutData(ownerId));
+  query.limit(1000);
+  const rows = await query.find({ useMasterKey: true });
+  if (rows.length > 0) {
+    await Parse.Object.destroyAll(rows, { useMasterKey: true });
+  }
+}
+
+module.exports = { record, listForCase, deleteAllForOwner, CLASS_NAME: AI_COST_CLASS_NAME };

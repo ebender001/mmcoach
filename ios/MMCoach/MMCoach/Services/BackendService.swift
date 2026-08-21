@@ -129,6 +129,14 @@ enum BackendService {
         try await run(CorrectDictationFunction(priorNarrative: priorNarrative, newSegment: newSegment))
     }
 
+    /// Permanently deletes the signed-in account and every case/AI-cost
+    /// record it owns. Irreversible, and there is no confirmation step on
+    /// the backend -- the caller (AccountView) is responsible for
+    /// confirming with the person first.
+    static func deleteAccount() async throws {
+        _ = try await run(DeleteAccountFunction())
+    }
+
     private static func run<Function: ParseCloudable>(_ function: Function) async throws -> Function.ReturnType {
         do {
             return try await function.runFunction()
@@ -206,4 +214,13 @@ private struct CorrectDictationFunction: ParseCloudable {
     var functionJobName = "mmCorrectDictation"
     var priorNarrative: String
     var newSegment: String
+}
+
+private struct DeleteAccountResponse: Decodable {
+    let deleted: Bool
+}
+
+private struct DeleteAccountFunction: ParseCloudable {
+    typealias ReturnType = DeleteAccountResponse
+    var functionJobName = "mmDeleteAccount"
 }

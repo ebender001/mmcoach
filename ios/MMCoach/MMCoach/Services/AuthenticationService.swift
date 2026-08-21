@@ -57,4 +57,11 @@ protocol AuthenticationService {
     func sendPasswordReset(email: String) async throws
 
     func signOut() async throws
+
+    /// Permanently deletes the signed-in account and all of its case data,
+    /// then clears the local session. Unlike `signOut()`, this can
+    /// genuinely fail (network/server error) and callers must surface
+    /// that -- it's a destructive, irreversible action the person needs
+    /// accurate feedback on, not a best-effort background cleanup.
+    func deleteAccount() async throws
 }

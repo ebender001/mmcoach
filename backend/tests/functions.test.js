@@ -5,10 +5,12 @@ global.Parse = Parse;
 
 jest.mock('../cloud/services/caseService');
 jest.mock('../cloud/services/pubmedService');
+jest.mock('../cloud/services/accountService');
 jest.mock('../cloud/ai/referenceQueryBuilder');
 jest.mock('../cloud/ai/dictationCorrector');
 const caseService = require('../cloud/services/caseService');
 const pubmedService = require('../cloud/services/pubmedService');
+const accountService = require('../cloud/services/accountService');
 const referenceQueryBuilder = require('../cloud/ai/referenceQueryBuilder');
 const dictationCorrector = require('../cloud/ai/dictationCorrector');
 const { NotFoundError, InvalidStateError } = require('../cloud/utils/errors');
@@ -22,6 +24,7 @@ require('../cloud/functions/updatePolishedNarrative');
 require('../cloud/functions/getCaseAICost');
 require('../cloud/functions/findReferences');
 require('../cloud/functions/correctDictation');
+require('../cloud/functions/deleteAccount');
 
 afterEach(() => jest.clearAllMocks());
 
@@ -456,5 +459,31 @@ describe('mmCorrectDictation', () => {
 
     expect(result.correctedSegment).toBe('saphenous vein graft to the right coronary artery');
     expect(result.changes).toEqual([{ original: 'sadness', corrected: 'saphenous' }]);
+  });
+});
+
+describe('mmDeleteAccount', () => {
+  it('rejects an unauthenticated request without calling the service', async () => {
+    await expect(
+      cloudRegistry.mmDeleteAccount({ params: {} })
+    ).rejects.toMatchObject({ code: Parse.Error.INVALID_SESSION_TOKEN });
+    expect(accountService.deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it('deletes the caller\'s own account and confirms', async () => {
+    accountService.deleteAccount.mockResolvedValue(undefined);
+
+    const result = await cloudRegistry.mmDeleteAccount({ params: {}, user: AUTH_USER });
+
+    expect(accountService.deleteAccount).toHaveBeenCalledWith('user1');
+    expect(result).toEqual({ deleted: true });
+  });
+
+  it('propagates a failure from the service as a Parse error', async () => {
+    accountService.deleteAccount.mockRejectedValue(new Error('backend unavailable'));
+
+    await expect(
+      cloudRegistry.mmDeleteAccount({ params: {}, user: AUTH_USER })
+    ).rejects.toMatchObject({ code: Parse.Error.INTERNAL_SERVER_ERROR });
   });
 });

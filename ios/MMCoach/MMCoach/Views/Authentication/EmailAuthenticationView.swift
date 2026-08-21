@@ -232,17 +232,31 @@ struct EmailAuthenticationView: View {
     }
 }
 
+#if DEBUG
+private enum EmailAuthenticationViewPreviewFactory {
+    @MainActor
+    static func signIn() -> EmailAuthenticationView {
+        let viewModel = AuthenticationViewModel(authService: PreviewAuthenticationService(),
+                                                appleSignIn: PreviewAppleSignInService())
+        viewModel.emailMode = .signIn
+        return EmailAuthenticationView(viewModel: viewModel)
+    }
+
+    @MainActor
+    static func createAccount() -> EmailAuthenticationView {
+        let viewModel = AuthenticationViewModel(authService: PreviewAuthenticationService(),
+                                                appleSignIn: PreviewAppleSignInService())
+        viewModel.emailMode = .createAccount
+        return EmailAuthenticationView(viewModel: viewModel)
+    }
+}
+
 #Preview("Sign In") {
-    let viewModel = AuthenticationViewModel(authService: PreviewAuthenticationService(),
-                                             appleSignIn: PreviewAppleSignInService())
-    viewModel.emailMode = .signIn
-    return EmailAuthenticationView(viewModel: viewModel)
+    EmailAuthenticationViewPreviewFactory.signIn()
 }
 
 #Preview("Create Account") {
-    let viewModel = AuthenticationViewModel(authService: PreviewAuthenticationService(),
-                                             appleSignIn: PreviewAppleSignInService())
-    viewModel.emailMode = .createAccount
-    return EmailAuthenticationView(viewModel: viewModel)
+    EmailAuthenticationViewPreviewFactory.createAccount()
 }
+#endif
 

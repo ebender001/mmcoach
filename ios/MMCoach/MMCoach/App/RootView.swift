@@ -47,6 +47,11 @@ struct RootView: View {
         // including sign-in and the initial checkingSession -> Welcome
         // launch transition, not just sign-out.
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: authViewModel.state)
+        // Onboarding -> Welcome is a separate switch within the same
+        // `.signedOut` case above, driven by `hasCompletedOnboarding`
+        // rather than `authViewModel.state` -- needs its own `.animation`
+        // or it snaps instantly when onboarding is dismissed.
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: hasCompletedOnboarding)
         .task { await authViewModel.refreshSession() }
     }
 

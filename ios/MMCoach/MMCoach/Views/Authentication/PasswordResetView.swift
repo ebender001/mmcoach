@@ -134,16 +134,17 @@ struct PasswordResetView: View {
     }
 }
 
+#if DEBUG
 #Preview("Enter email") {
     let viewModel = AuthenticationViewModel(authService: PreviewAuthenticationService(),
                                              appleSignIn: PreviewAppleSignInService())
-    return PasswordResetView(viewModel: viewModel)
+    PasswordResetView(viewModel: viewModel)
 }
 
 #Preview("Confirmation") {
     let viewModel = AuthenticationViewModel(authService: PreviewAuthenticationService(),
                                              appleSignIn: PreviewAppleSignInService())
-    return PasswordResetView(viewModel: viewModel)
+    PasswordResetView(viewModel: viewModel)
         .task {
             // Runs after PasswordResetView's own onAppear (which resets
             // the form), so this reliably ends up as the visible state.
@@ -151,3 +152,4 @@ struct PasswordResetView: View {
             await viewModel.sendPasswordReset()
         }
 }
+#endif

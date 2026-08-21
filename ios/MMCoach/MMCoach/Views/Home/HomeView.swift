@@ -215,22 +215,30 @@ struct HomeView: View {
     }
 }
 
+#if DEBUG
+private enum HomeViewPreviewFactory {
+    static func populated() -> HomeView {
+        let store = RecentCasesStore(defaults: {
+            let defaults = UserDefaults(suiteName: "HomeView.Populated.Preview")!
+            defaults.removePersistentDomain(forName: "HomeView.Populated.Preview")
+            return defaults
+        }())
+        for record in [
+            RecentCaseRecord(id: "1", title: "68-year-old man, CABG x3, postoperative bleeding", createdAt: Date(), status: .collectingInformation),
+            RecentCaseRecord(id: "2", title: "54-year-old woman, laparoscopic cholecystectomy, bile leak", createdAt: Date().addingTimeInterval(-86_400), status: .readyToFinalize),
+            RecentCaseRecord(id: "3", title: "72-year-old man, AAA repair, postoperative MI", createdAt: Date().addingTimeInterval(-172_800), status: .completed)
+        ] {
+            store.upsert(record)
+        }
+        return HomeView(viewModel: HomeViewModel(store: store))
+    }
+}
+
 #Preview("Empty") {
     HomeView()
 }
 
 #Preview("Populated") {
-    let store = RecentCasesStore(defaults: {
-        let defaults = UserDefaults(suiteName: "HomeView.Populated.Preview")!
-        defaults.removePersistentDomain(forName: "HomeView.Populated.Preview")
-        return defaults
-    }())
-    for record in [
-        RecentCaseRecord(id: "1", title: "68-year-old man, CABG x3, postoperative bleeding", createdAt: Date(), status: .collectingInformation),
-        RecentCaseRecord(id: "2", title: "54-year-old woman, laparoscopic cholecystectomy, bile leak", createdAt: Date().addingTimeInterval(-86_400), status: .readyToFinalize),
-        RecentCaseRecord(id: "3", title: "72-year-old man, AAA repair, postoperative MI", createdAt: Date().addingTimeInterval(-172_800), status: .completed)
-    ] {
-        store.upsert(record)
-    }
-    return HomeView(viewModel: HomeViewModel(store: store))
+    HomeViewPreviewFactory.populated()
 }
+#endif

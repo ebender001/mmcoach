@@ -254,6 +254,7 @@ struct PaywallView: View {
     }
 }
 
+#if DEBUG
 #Preview("Ready, zero cases") {
     Color.warmBackground
         .sheet(isPresented: .constant(true)) {
@@ -352,3 +353,4 @@ struct PaywallView: View {
         }
         .environment(\.sizeCategory, .accessibilityExtraExtraExtraLarge)
 }
+#endif

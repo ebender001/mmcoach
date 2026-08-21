@@ -154,24 +154,43 @@ struct WelcomeView: View {
     }
 }
 
+#if DEBUG
+private enum WelcomeViewPreviewFactory {
+    @MainActor
+    static func signedOut() -> WelcomeView {
+        WelcomeView(viewModel: AuthenticationViewModel(authService: PreviewAuthenticationService(),
+                                                       appleSignIn: PreviewAppleSignInService()))
+    }
+
+    @MainActor
+    static func appleSignInError() -> WelcomeView {
+        let viewModel = AuthenticationViewModel(authService: PreviewAuthenticationService(),
+                                                appleSignIn: PreviewAppleSignInService())
+        viewModel.appleSignInErrorMessage = "Sign in with Apple didn't complete. Please try again."
+        return WelcomeView(viewModel: viewModel)
+    }
+
+    @MainActor
+    static func sessionExpired() -> some View {
+        let viewModel = AuthenticationViewModel(authService: PreviewAuthenticationService(currentUserResult: .preview),
+                                                appleSignIn: PreviewAppleSignInService())
+        return WelcomeView(viewModel: viewModel)
+            .task {
+                await viewModel.refreshSession()
+                NotificationCenter.default.post(name: .mmSessionExpired, object: nil)
+            }
+    }
+}
+
 #Preview("Signed out") {
-    WelcomeView(viewModel: AuthenticationViewModel(authService: PreviewAuthenticationService(),
-                                                    appleSignIn: PreviewAppleSignInService()))
+    WelcomeViewPreviewFactory.signedOut()
 }
 
 #Preview("Apple sign-in error") {
-    let viewModel = AuthenticationViewModel(authService: PreviewAuthenticationService(),
-                                             appleSignIn: PreviewAppleSignInService())
-    viewModel.appleSignInErrorMessage = "Sign in with Apple didn't complete. Please try again."
-    return WelcomeView(viewModel: viewModel)
+    WelcomeViewPreviewFactory.appleSignInError()
 }
 
 #Preview("Session expired") {
-    let viewModel = AuthenticationViewModel(authService: PreviewAuthenticationService(currentUserResult: .preview),
-                                             appleSignIn: PreviewAppleSignInService())
-    return WelcomeView(viewModel: viewModel)
-        .task {
-            await viewModel.refreshSession()
-            NotificationCenter.default.post(name: .mmSessionExpired, object: nil)
-        }
+    WelcomeViewPreviewFactory.sessionExpired()
 }
+#endif

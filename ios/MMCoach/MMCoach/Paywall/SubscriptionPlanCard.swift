@@ -80,6 +80,7 @@ struct SubscriptionPlanCard: View {
     }
 }
 
+#if DEBUG
 #Preview {
     let plans: [SubscriptionPlan] = .previewPlans
     VStack(spacing: 12) {
@@ -90,3 +91,4 @@ struct SubscriptionPlanCard: View {
     .padding()
     .background(Color.warmBackground)
 }
+#endif

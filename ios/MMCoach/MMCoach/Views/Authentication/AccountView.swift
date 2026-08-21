@@ -211,6 +211,7 @@ struct AccountView: View {
     }
 }
 
+#if DEBUG
 #Preview("Email account") {
     AccountView(user: .preview, onDeleteAccount: {}, onSignOut: {})
 }
@@ -224,3 +225,4 @@ struct AccountView: View {
         throw AuthenticationServiceError.network
     }, onSignOut: {})
 }
+#endif

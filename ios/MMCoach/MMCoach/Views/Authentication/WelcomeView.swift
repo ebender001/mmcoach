@@ -43,10 +43,11 @@ struct WelcomeView: View {
 
                 actions
 
-                Text("By continuing, you agree to the Terms of Use and Privacy Policy.")
+                Text("By continuing, you agree to the [Terms of Use](\(LegalLinks.termsOfUse.absoluteString)) and [Privacy Policy](\(LegalLinks.privacyPolicy.absoluteString)).")
                     .font(.caption2)
                     .foregroundStyle(Color.slateText)
                     .multilineTextAlignment(.center)
+                    .tint(Color.mutedTeal)
                     .padding(.top, 20)
 
                 Spacer(minLength: 16)

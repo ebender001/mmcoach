@@ -17,12 +17,10 @@ struct PaywallView: View {
 
     /// Called exactly once, when a purchase, a restore, or the free-case
     /// action confirms the person should proceed to the new-case workflow.
-    /// The caller is responsible for dismissing (this view does so itself
-    /// first) and pushing the new-case route.
+    /// The caller owns dismissing the sheet and pushing the new-case
+    /// route -- this view doesn't call `dismiss()` itself, since doing so
+    /// alongside the caller's own dismissal would race it (see HomeView).
     let onUnlocked: () -> Void
-
-    static let termsOfUseURL = URL(string: "https://mmcoach.app/terms-of-use.html")!
-    static let privacyPolicyURL = URL(string: "https://mmcoach.app/privacy-policy.html")!
 
     init(viewModel: PaywallViewModel? = nil, onUnlocked: @escaping () -> Void) {
         // Built inside the initializer body, not as the parameter's default
@@ -239,9 +237,9 @@ struct PaywallView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 6) {
-                Link("Terms of Use", destination: Self.termsOfUseURL)
+                Link("Terms of Use", destination: LegalLinks.termsOfUse)
                 Text("·").foregroundStyle(Color.slateText)
-                Link("Privacy Policy", destination: Self.privacyPolicyURL)
+                Link("Privacy Policy", destination: LegalLinks.privacyPolicy)
             }
             .font(.caption2.weight(.medium))
         }

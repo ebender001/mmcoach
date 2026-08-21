@@ -14,28 +14,26 @@ struct NewCaseView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    header
-                    editorCard
+            VStack(alignment: .leading, spacing: 20) {
+                header
+                editorCard
 
-                    if !viewModel.spellingSuggestions.isEmpty {
-                        Text("Double-check spelling: \(viewModel.spellingSuggestions.joined(separator: ", "))")
-                            .font(.footnote)
-                            .foregroundStyle(Color.slateText)
-                    }
-
-                    if let errorMessage = viewModel.errorMessage {
-                        Text(errorMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
+                if !viewModel.spellingSuggestions.isEmpty {
+                    Text("Double-check spelling: \(viewModel.spellingSuggestions.joined(separator: ", "))")
+                        .font(.footnote)
+                        .foregroundStyle(Color.slateText)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 24)
+
+                if let errorMessage = viewModel.errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
             }
-            .scrollDismissesKeyboard(.interactively)
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 16)
+            .frame(maxHeight: .infinity, alignment: .top)
 
             Divider()
                 .opacity(0.5)
@@ -66,7 +64,7 @@ struct NewCaseView: View {
             Text("Describe the case")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.primary)
-            Text("Present it as you would at M&M conference.")
+            Text("Present it as you would at M&M conference. Do not include protected health information, including patient names, hospital or institution names, or dates of service.")
                 .font(.subheadline)
                 .foregroundStyle(Color.slateText)
         }
@@ -83,11 +81,12 @@ struct NewCaseView: View {
                 text: $viewModel.narrativeText,
                 phase: viewModel.dictationPhase,
                 placeholder: "A 68-year-old man underwent CABG x3. He was initially stable in the ICU…",
-                minHeight: 200,
+                minHeight: 160,
                 onToggleDictation: { Task { await viewModel.toggleDictation() } }
             )
         }
         .padding(16)
+        .frame(maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color(.secondarySystemGroupedBackground))

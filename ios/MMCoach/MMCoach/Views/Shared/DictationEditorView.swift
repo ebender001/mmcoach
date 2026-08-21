@@ -15,6 +15,13 @@ struct DictationEditorView: View {
     @Binding var text: String
     let phase: DictationPhase
     let placeholder: String
+    /// A floor, not a fixed size -- the editor expands to fill whatever
+    /// vertical space its parent has left over (see callers' use of
+    /// `.frame(maxHeight: .infinity)`), using the remaining screen real
+    /// estate instead of sitting short with empty space below it. Long
+    /// text still scrolls *inside* the editor (TextEditor's native
+    /// scrolling) once it exceeds however tall that ends up being, rather
+    /// than growing without bound and scrolling the whole screen.
     let minHeight: CGFloat
     let onToggleDictation: () -> Void
 
@@ -25,6 +32,7 @@ struct DictationEditorView: View {
             editor
             dictationControl
         }
+        .frame(maxHeight: .infinity)
     }
 
     private var editor: some View {
@@ -33,7 +41,7 @@ struct DictationEditorView: View {
             .font(.body)
             .scrollContentBackground(.hidden)
             .padding(12)
-            .frame(minHeight: minHeight)
+            .frame(minHeight: minHeight, maxHeight: .infinity)
             .disabled(phase != .idle)
             .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
             .overlay(

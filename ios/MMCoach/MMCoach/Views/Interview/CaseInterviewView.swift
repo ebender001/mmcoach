@@ -41,9 +41,10 @@ struct CaseInterviewView: View {
                 text: $viewModel.answerText,
                 phase: viewModel.dictationPhase,
                 placeholder: "Answer as you would explain it out loud…",
-                minHeight: 140,
+                minHeight: 120,
                 onToggleDictation: { Task { await viewModel.toggleDictation() } }
             )
+            .frame(maxHeight: .infinity)
 
             if !viewModel.spellingSuggestions.isEmpty {
                 Text("Double-check spelling: \(viewModel.spellingSuggestions.joined(separator: ", "))")
@@ -56,8 +57,6 @@ struct CaseInterviewView: View {
                     .font(.footnote)
                     .foregroundStyle(.red)
             }
-
-            Spacer(minLength: 0)
 
             Button {
                 Task { await viewModel.submitAnswer() }

@@ -8,44 +8,69 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import dev.benderapps.mmcoach.models.AuthenticatedUserPlaceholder
+import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.benderapps.mmcoach.models.AuthenticationState
+import dev.benderapps.mmcoach.viewmodels.AuthenticationViewModel
+
+private enum class AuthFlowScreen { WELCOME, EMAIL, PASSWORD_RESET }
 
 /**
  * App root: switches between the Welcome/authentication flow and the MM
  * Coach home screen based on auth state. Mirrors iOS `App/RootView.swift`.
- *
- * Placeholder state machine -- there is no AuthenticationViewModel/Parse
- * session check wired up yet (see AuthenticationService.swift on iOS for
- * what that port still needs); this only demonstrates the screen shell
- * and Michigan-branded theme end to end.
  */
 @Composable
-fun RootScreen() {
-    var authState by remember { mutableStateOf<AuthenticationState>(AuthenticationState.SignedOut) }
+fun RootScreen(authViewModel: AuthenticationViewModel = viewModel()) {
+    LaunchedEffect(Unit) { authViewModel.refreshSession() }
 
     Surface(
         modifier = Modifier.safeDrawingPadding(),
         color = MaterialTheme.colorScheme.background,
     ) {
-        Crossfade(targetState = authState, label = "authState") { state ->
+        Crossfade(targetState = authViewModel.state, label = "authState") { state ->
             when (state) {
                 is AuthenticationState.CheckingSession, is AuthenticationState.EndingSession -> LoadingScreen()
-                is AuthenticationState.SignedOut -> WelcomeScreen(
-                    onContinue = {
-                        authState = AuthenticationState.SignedIn(AuthenticatedUserPlaceholder)
-                    },
-                )
+                is AuthenticationState.SignedOut -> AuthFlow(authViewModel)
                 is AuthenticationState.SignedIn -> HomeScreen(
-                    onSignOut = { authState = AuthenticationState.SignedOut },
+                    currentUser = state.user,
+                    onSignOut = { authViewModel.signOut() },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun AuthFlow(authViewModel: AuthenticationViewModel) {
+    var screen by remember { mutableStateOf(AuthFlowScreen.WELCOME) }
+
+    Crossfade(targetState = screen, label = "authFlowScreen") { current ->
+        when (current) {
+            AuthFlowScreen.WELCOME -> WelcomeScreen(
+                onContinueWithEmail = {
+                    authViewModel.resetEmailForm()
+                    screen = AuthFlowScreen.EMAIL
+                },
+            )
+            AuthFlowScreen.EMAIL -> EmailAuthScreen(
+                viewModel = authViewModel,
+                onDismiss = { screen = AuthFlowScreen.WELCOME },
+                onForgotPassword = {
+                    authViewModel.resetPasswordResetForm()
+                    authViewModel.resetEmail = authViewModel.email
+                    screen = AuthFlowScreen.PASSWORD_RESET
+                },
+            )
+            AuthFlowScreen.PASSWORD_RESET -> PasswordResetScreen(
+                viewModel = authViewModel,
+                onDismiss = { screen = AuthFlowScreen.EMAIL },
+            )
         }
     }
 }

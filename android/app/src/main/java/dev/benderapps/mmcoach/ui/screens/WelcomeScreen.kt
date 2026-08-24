@@ -17,12 +17,12 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Entry screen shown to signed-out users. Mirrors iOS
- * `Views/Authentication/WelcomeView.swift` at scaffold scope -- real
- * Google Sign-In / email auth still needs to be wired in, matching the
- * iOS AuthenticationService/AppleSignInService ports.
+ * `Views/Authentication/WelcomeView.swift`, minus the Sign in with Apple
+ * button and tappable Terms/Privacy links (email is the only sign-in
+ * method ported so far; see AuthenticationViewModel).
  */
 @Composable
-fun WelcomeScreen(onContinue: () -> Unit) {
+fun WelcomeScreen(onContinueWithEmail: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -36,21 +36,33 @@ fun WelcomeScreen(onContinue: () -> Unit) {
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "Prepare confidently for your Morbidity & Mortality conference.",
+            text = "Case conference preparation",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = "Prepare clinical cases for M&M conference with a guided, structured workflow.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 12.dp, bottom = 32.dp),
+            modifier = Modifier.padding(top = 20.dp, bottom = 32.dp),
         )
         Button(
-            onClick = onContinue,
+            onClick = onContinueWithEmail,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
             ),
         ) {
-            Text("Continue")
+            Text("Continue with Email")
         }
+        Text(
+            text = "By continuing, you agree to our Terms of Use and Privacy Policy.",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 20.dp),
+        )
     }
 }

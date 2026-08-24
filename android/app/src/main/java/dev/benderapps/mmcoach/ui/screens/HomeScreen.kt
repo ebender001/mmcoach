@@ -10,6 +10,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.benderapps.mmcoach.models.AuthenticatedUser
 
 /**
  * Signed-in home screen. Mirrors iOS `Views/Home/HomeView.swift` at
@@ -17,7 +18,7 @@ import androidx.compose.ui.unit.dp
  * still need to be ported from HomeViewModel/NewCaseViewModel.
  */
 @Composable
-fun HomeScreen(onSignOut: () -> Unit) {
+fun HomeScreen(currentUser: AuthenticatedUser, onSignOut: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -29,6 +30,13 @@ fun HomeScreen(onSignOut: () -> Unit) {
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.primary,
         )
+        currentUser.email?.let { email ->
+            Text(
+                text = "Signed in as $email",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Text(
             text = "No cases yet. Start a new case to begin preparing.",
             style = MaterialTheme.typography.bodyLarge,

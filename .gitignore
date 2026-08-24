@@ -33,3 +33,10 @@ ios/**/xcuserdata/
 ios/**/*.xcuserstate
 ios/**/DerivedData/
 ios/**/.build/
+
+# Android / Gradle
+android/local.properties
+android/.gradle/
+android/**/.cxx/
+android/captures/
+android/*.hprof

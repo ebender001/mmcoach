@@ -8,7 +8,6 @@
 //  (.polishedCard(), warmBackground) rather than a plain system list.
 //
 
-import StoreKit
 import SwiftUI
 
 struct AccountView: View {
@@ -21,8 +20,15 @@ struct AccountView: View {
     let onSignOut: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    /// Deliberately *not* `.manageSubscriptionsSheet(isPresented:)` --
+    /// that in-app system sheet has no completion/error callback at all
+    /// (SwiftUI/StoreKit own it entirely once presented), and is a known
+    /// source of an indefinite "Loading…" hang, especially for an account
+    /// with no purchase history for this app. Handing off to the App
+    /// Store's own subscriptions page instead can't get the app stuck --
+    /// worst case Safari/App Store shows its own error, not us.
+    @Environment(\.openURL) private var openURL
     @State private var isSigningOut = false
-    @State private var isPresentingManageSubscriptions = false
     @State private var isPresentingDeleteConfirmation = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountErrorMessage: String?
@@ -50,7 +56,6 @@ struct AccountView: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .manageSubscriptionsSheet(isPresented: $isPresentingManageSubscriptions)
         }
     }
 
@@ -85,7 +90,7 @@ struct AccountView: View {
     private var actionsCard: some View {
         VStack(spacing: 0) {
             settingsRow(icon: "creditcard", title: "Manage Subscription") {
-                isPresentingManageSubscriptions = true
+                openURL(Self.manageSubscriptionsURL)
             }
 
             Divider().overlay(Color.primary.opacity(0.06))
@@ -128,7 +133,7 @@ struct AccountView: View {
             // account left to use. This gives them a way out of the
             // dialog straight into Manage Subscription instead.
             Button("Manage Subscription First") {
-                isPresentingManageSubscriptions = true
+                openURL(Self.manageSubscriptionsURL)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -171,6 +176,11 @@ struct AccountView: View {
         .buttonStyle(.plain)
         .disabled(isBusy)
     }
+
+    /// Apple's own hosted subscriptions management page -- opens in the
+    /// App Store app (or Safari as a fallback). See the `openURL` comment
+    /// above for why this replaces `.manageSubscriptionsSheet(isPresented:)`.
+    private static let manageSubscriptionsURL = URL(string: "https://apps.apple.com/account/subscriptions")!
 
     private var signInMethodText: String {
         switch user?.signInMethod {

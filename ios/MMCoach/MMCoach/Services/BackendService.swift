@@ -136,6 +136,14 @@ enum BackendService {
         try await run(FindReferencesFunction(topic: topic, searchIntent: searchIntent, caseId: caseId)).results
     }
 
+    /// Drafts a model answer to one of the case's own likely faculty
+    /// questions -- a live, on-demand rehearsal aid; not persisted to the
+    /// case, so it's recomputed each time it's requested (mirrors
+    /// `findReferences`).
+    static func answerFacultyQuestion(caseId: String, question: String) async throws -> String {
+        try await run(AnswerFacultyQuestionFunction(caseId: caseId, question: question)).answer
+    }
+
     /// Corrects one freshly-dictated narrative segment. `priorNarrative` is
     /// passed only as context for disambiguation -- the backend does not
     /// re-edit it, and only `correctedSegment` should be appended locally.
@@ -232,6 +240,13 @@ private struct FindReferencesFunction: ParseCloudable {
     var topic: String
     var searchIntent: String?
     var caseId: String?
+}
+
+private struct AnswerFacultyQuestionFunction: ParseCloudable {
+    typealias ReturnType = FacultyQuestionAnswer
+    var functionJobName = "mmAnswerFacultyQuestion"
+    var caseId: String
+    var question: String
 }
 
 private struct CorrectDictationFunction: ParseCloudable {

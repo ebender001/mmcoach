@@ -24,6 +24,7 @@ require('../cloud/functions/redeemFreeCase');
 require('../cloud/functions/updatePolishedNarrative');
 require('../cloud/functions/getCaseAICost');
 require('../cloud/functions/findReferences');
+require('../cloud/functions/answerFacultyQuestion');
 require('../cloud/functions/correctDictation');
 require('../cloud/functions/deleteAccount');
 
@@ -468,6 +469,56 @@ describe('mmFindReferences', () => {
     await expect(
       cloudRegistry.mmFindReferences({ params: { topic: 'Postoperative bleeding' }, user: AUTH_USER })
     ).rejects.toMatchObject({ code: Parse.Error.INTERNAL_SERVER_ERROR });
+  });
+});
+
+describe('mmAnswerFacultyQuestion', () => {
+  it('rejects an unauthenticated request without calling the service', async () => {
+    await expect(
+      cloudRegistry.mmAnswerFacultyQuestion({ params: { caseId: 'abc123', question: 'Why now?' } })
+    ).rejects.toMatchObject({ code: Parse.Error.INVALID_SESSION_TOKEN });
+    expect(caseService.answerFacultyQuestion).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing question', async () => {
+    await expect(
+      cloudRegistry.mmAnswerFacultyQuestion({ params: { caseId: 'abc123' }, user: AUTH_USER })
+    ).rejects.toThrow();
+    expect(caseService.answerFacultyQuestion).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing caseId', async () => {
+    await expect(
+      cloudRegistry.mmAnswerFacultyQuestion({ params: { question: 'Why now?' }, user: AUTH_USER })
+    ).rejects.toThrow();
+    expect(caseService.answerFacultyQuestion).not.toHaveBeenCalled();
+  });
+
+  it('propagates not-found when the case does not belong to the caller', async () => {
+    caseService.answerFacultyQuestion.mockRejectedValue(new NotFoundError('No case found with id abc123.'));
+
+    await expect(
+      cloudRegistry.mmAnswerFacultyQuestion({ params: { caseId: 'abc123', question: 'Why now?' }, user: AUTH_USER })
+    ).rejects.toMatchObject({ code: Parse.Error.OBJECT_NOT_FOUND });
+  });
+
+  it('returns the question paired with its drafted answer', async () => {
+    caseService.answerFacultyQuestion.mockResolvedValue({
+      question: 'What prompted the decision to obtain imaging at that point?',
+      answer: 'Imaging was obtained once transfusion requirements began escalating.',
+    });
+
+    const result = await cloudRegistry.mmAnswerFacultyQuestion({
+      params: { caseId: 'abc123', question: 'What prompted the decision to obtain imaging at that point?' },
+      user: AUTH_USER,
+    });
+
+    expect(caseService.answerFacultyQuestion).toHaveBeenCalledWith({
+      caseId: 'abc123',
+      ownerId: 'user1',
+      question: 'What prompted the decision to obtain imaging at that point?',
+    });
+    expect(result.answer).toBe('Imaging was obtained once transfusion requirements began escalating.');
   });
 });
 

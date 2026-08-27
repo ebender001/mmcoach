@@ -3,12 +3,14 @@ jest.mock('../cloud/repositories/aiCostRepository');
 jest.mock('../cloud/ai/caseAnalyzer');
 jest.mock('../cloud/ai/questionGenerator');
 jest.mock('../cloud/ai/finalizer');
+jest.mock('../cloud/ai/facultyQuestionAnswerer');
 
 const caseRepository = require('../cloud/repositories/caseRepository');
 const aiCostRepository = require('../cloud/repositories/aiCostRepository');
 const caseAnalyzer = require('../cloud/ai/caseAnalyzer');
 const questionGenerator = require('../cloud/ai/questionGenerator');
 const finalizer = require('../cloud/ai/finalizer');
+const facultyQuestionAnswerer = require('../cloud/ai/facultyQuestionAnswerer');
 const caseService = require('../cloud/services/caseService');
 const { NotFoundError, InvalidStateError, AIProviderError } = require('../cloud/utils/errors');
 const { CaseStatus } = require('../cloud/schemas/caseStatus');
@@ -374,6 +376,54 @@ describe('getCaseAICost', () => {
     expect(result.totalCostUSD).toBe(0.0234);
     expect(result.totalTokens).toBe(900);
     expect(result.calls).toHaveLength(2);
+  });
+});
+
+describe('answerFacultyQuestion', () => {
+  it('throws NotFoundError when the case belongs to a different user', async () => {
+    caseRepository.getById.mockResolvedValue(baseCaseState({ ownerId: 'someone-else' }));
+
+    await expect(
+      caseService.answerFacultyQuestion({ caseId: 'case1', ownerId: 'user1', question: 'Why now?' })
+    ).rejects.toThrow(NotFoundError);
+    expect(facultyQuestionAnswerer.answerQuestion).not.toHaveBeenCalled();
+  });
+
+  it('drafts an answer grounded in the case and records AI usage', async () => {
+    const state = baseCaseState({
+      extractedCase: { procedure: 'CABG x3' },
+      conversation: [{ question: 'When?', answer: 'Four hours postop.' }],
+      polishedNarrative: 'A 68-year-old man underwent CABG x3...',
+    });
+    caseRepository.getById.mockResolvedValue(state);
+    facultyQuestionAnswerer.answerQuestion.mockResolvedValue({
+      answer: 'Imaging was obtained once transfusion requirements began escalating.',
+      meta: { model: 'gpt-test', latencyMs: 5, usage: { total_tokens: 40 } },
+      promptVersion: '1.0.0',
+    });
+    aiCostRepository.record.mockResolvedValue({ costUSD: 0.001, totalTokens: 40 });
+    caseRepository.incrementAIUsage.mockResolvedValue(undefined);
+
+    const result = await caseService.answerFacultyQuestion({
+      caseId: 'case1',
+      ownerId: 'user1',
+      question: 'What prompted the decision to obtain imaging at that point?',
+    });
+
+    expect(facultyQuestionAnswerer.answerQuestion).toHaveBeenCalledWith({
+      extractedCase: { procedure: 'CABG x3' },
+      conversation: [{ question: 'When?', answer: 'Four hours postop.' }],
+      polishedNarrative: 'A 68-year-old man underwent CABG x3...',
+      question: 'What prompted the decision to obtain imaging at that point?',
+      caseId: 'case1',
+    });
+    expect(aiCostRepository.record).toHaveBeenCalledWith(
+      expect.objectContaining({ caseId: 'case1', ownerId: 'user1', operation: 'answerFacultyQuestion' })
+    );
+    expect(result).toEqual({
+      question: 'What prompted the decision to obtain imaging at that point?',
+      answer: 'Imaging was obtained once transfusion requirements began escalating.',
+    });
   });
 });
 

@@ -12,5 +12,6 @@ require('./functions/redeemFreeCase');
 require('./functions/updatePolishedNarrative');
 require('./functions/getCaseAICost');
 require('./functions/findReferences');
+require('./functions/answerFacultyQuestion');
 require('./functions/correctDictation');
 require('./functions/deleteAccount');

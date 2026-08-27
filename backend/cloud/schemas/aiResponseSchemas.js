@@ -131,10 +131,21 @@ function validateReferenceQueryResponse(data) {
   return { query: data.query.trim() };
 }
 
+function validateFacultyQuestionAnswerResponse(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new AIResponseError('Faculty-question-answer response was not a JSON object.');
+  }
+  if (!isNonEmptyString(data.answer)) {
+    throw new AIResponseError('Faculty-question-answer response is missing "answer".');
+  }
+  return { answer: data.answer.trim() };
+}
+
 module.exports = {
   validateAnalyzeCaseResponse,
   validateNextQuestionResponse,
   validateFinalizeCaseResponse,
   validateCorrectDictationResponse,
   validateReferenceQueryResponse,
+  validateFacultyQuestionAnswerResponse,
 };

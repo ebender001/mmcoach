@@ -10,6 +10,7 @@ const deviceRedemptionRepository = require('../repositories/deviceRedemptionRepo
 const caseAnalyzer = require('../ai/caseAnalyzer');
 const questionGenerator = require('../ai/questionGenerator');
 const finalizer = require('../ai/finalizer');
+const facultyQuestionAnswerer = require('../ai/facultyQuestionAnswerer');
 const { CaseStatus } = require('../schemas/caseStatus');
 const { NotFoundError, InvalidStateError } = require('../utils/errors');
 const { generateId } = require('../utils/idGenerator');
@@ -263,6 +264,26 @@ async function updatePolishedNarrative({ caseId, ownerId, polishedNarrative }) {
   return caseRepository.update(caseId, { polishedNarrative });
 }
 
+/**
+ * Drafts a model answer to one of the case's own likely faculty questions,
+ * grounded in that case's details -- an on-demand rehearsal aid, not
+ * persisted onto the case. Mirrors mmFindReferences: computed fresh each
+ * time and its cost rolled into the case's running AI total, rather than
+ * being folded into finalizeCase's output.
+ */
+async function answerFacultyQuestion({ caseId, ownerId, question }) {
+  const caseState = await getOwnedCase(caseId, ownerId);
+  const result = await facultyQuestionAnswerer.answerQuestion({
+    extractedCase: caseState.extractedCase,
+    conversation: caseState.conversation,
+    polishedNarrative: caseState.polishedNarrative,
+    question,
+    caseId,
+  });
+  await recordAIUsage({ caseId, ownerId, operation: 'answerFacultyQuestion', meta: result.meta });
+  return { question, answer: result.answer };
+}
+
 /** Per-case AI cost: the running total plus every individual call. */
 async function getCaseAICost({ caseId, ownerId }) {
   const caseState = await getOwnedCase(caseId, ownerId);
@@ -326,6 +347,7 @@ module.exports = {
   redeemFreeCase,
   updatePolishedNarrative,
   getCaseAICost,
+  answerFacultyQuestion,
   recordAIUsage,
   formatCaseSummary,
   formatFinalizedCase,

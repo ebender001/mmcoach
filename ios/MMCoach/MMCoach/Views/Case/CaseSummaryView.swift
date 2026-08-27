@@ -9,11 +9,33 @@
 //
 
 import SwiftUI
+import TipKit
+
+/// Shown once, above the segmented control, the first time the Prepared
+/// Case screen is seen -- the trainee's dictation becomes the polished
+/// narrative on the "Case" tab, and the pencil in that tab's toolbar is
+/// the only way back into it.
+///
+/// This can't be a `.popoverTip()` anchored to that pencil toolbar
+/// button: SwiftUI bridges toolbar content to UIKit bar button items, and
+/// that bridging doesn't carry the anchor-preference data `.popoverTip()`
+/// needs to find its anchor, so the tip is silently never shown even
+/// though TipKit itself reports it as eligible (confirmed via TipKit's
+/// own debug log). An inline `TipView` with a downward arrow, placed
+/// above the segmented control, is the reliable substitute for "pointing
+/// at" that toolbar button.
+struct EditNarrativeTip: Tip {
+    var title: Text { Text("Edit Your Dictation") }
+    var message: Text? { Text("You can edit your dictation here.") }
+    var image: Image? { Image(systemName: "pencil") }
+    var options: [any Tip.Option] { [Tip.MaxDisplayCount(1)] }
+}
 
 struct CaseSummaryView: View {
     @StateObject private var viewModel: CaseSummaryViewModel
     @State private var selectedSection = Section.polishedCase
     @Binding var path: [AppRoute]
+    private let editNarrativeTip = EditNarrativeTip()
 
     init(viewModel: @autoclosure @escaping () -> CaseSummaryViewModel, path: Binding<[AppRoute]>) {
         _viewModel = StateObject(wrappedValue: viewModel())
@@ -31,6 +53,12 @@ struct CaseSummaryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if selectedSection == .polishedCase && !viewModel.isLoading {
+                TipView(editNarrativeTip, arrowEdge: .top)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+            }
+
             Picker("Section", selection: $selectedSection) {
                 ForEach(Section.allCases) { section in
                     Text(section.rawValue).tag(section)
@@ -78,7 +106,7 @@ struct CaseSummaryView: View {
         case .prepare:
             DiscussionPrepView(topics: viewModel.discussionPreparation)
         case .questions:
-            FacultyQuestionsView(questions: viewModel.likelyFacultyQuestions)
+            FacultyQuestionsView(questions: viewModel.likelyFacultyQuestions, caseId: viewModel.caseId)
         case .references:
             ReferencesView(references: viewModel.references, caseId: viewModel.caseId)
         }

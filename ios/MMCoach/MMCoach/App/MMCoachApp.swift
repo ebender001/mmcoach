@@ -6,11 +6,16 @@
 //
 
 import SwiftUI
+import TipKit
 
 @main
 struct MMCoachApp: App {
     init() {
         BackendConfig.configureParse()
+        try? Tips.configure([
+            .displayFrequency(.immediate),
+            .datastoreLocation(.applicationDefault),
+        ])
     }
 
     var body: some Scene {

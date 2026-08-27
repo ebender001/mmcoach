@@ -132,10 +132,18 @@ struct PaywallView: View {
             }
             .padding(.vertical, 32)
 
-        case .purchaseFailed(let message) where viewModel.plans.isEmpty:
-            // The initial load itself failed -- nothing to show but retry.
+        case .unableToLoadProducts:
+            // The initial product request (plus its automatic retries --
+            // see PaywallViewModel.attemptLoadPlans()) never came back with
+            // any products. Never leave a reviewer/trainee stuck on the
+            // spinner above -- show a clean, non-technical error with a
+            // way to retry instead.
             VStack(spacing: 12) {
-                Text(message)
+                Text("Unable to Load Subscriptions")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                Text("Subscription options couldn't be loaded from the App Store. Please check your connection and try again.")
                     .font(.subheadline)
                     .foregroundStyle(Color.slateText)
                     .multilineTextAlignment(.center)
@@ -297,7 +305,9 @@ struct PaywallView: View {
         }
 }
 
-#Preview("Product load failure") {
+#Preview("Product load failure (all retries fail)") {
+    // Every attempt fails, so this shows the spinner for ~3s (2 automatic
+    // retries, ~1.5s apart) before landing on the unable-to-load state.
     Color.warmBackground
         .sheet(isPresented: .constant(true)) {
             PaywallView(

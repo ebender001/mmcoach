@@ -60,6 +60,11 @@ enum SubscriptionServiceError: LocalizedError, Equatable {
     case verificationFailed
     case network
     case unknown
+    /// The App Store never responded to a purchase or restore request
+    /// within `StoreKitSubscriptionService.storeKitTimeout` -- without this,
+    /// an unresponsive `Product.purchase()`/`AppStore.sync()` call leaves
+    /// the trainee staring at an indefinite spinner with no way to recover.
+    case timedOut
 
     var errorDescription: String? {
         switch self {
@@ -71,6 +76,8 @@ enum SubscriptionServiceError: LocalizedError, Equatable {
             return "M & M Coach couldn't reach the App Store. Check your connection and try again."
         case .unknown:
             return "Something went wrong with that purchase. Please try again."
+        case .timedOut:
+            return "The App Store didn't respond in time. Please check your connection and try again."
         }
     }
 }

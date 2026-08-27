@@ -20,11 +20,15 @@ enum PaywallState: Equatable {
     /// (see BackendService.redeemFreeCase), not an instant local flag
     /// flip, so it needs its own busy state like purchasing/restoring do.
     case redeemingFreeCase
-    /// Also covers a `loadPlans()` failure (see `load()`) -- from the
-    /// trainee's point of view, "plans didn't load" and "a purchase
-    /// failed" both mean "nothing was purchased, here's why, try again."
     case purchaseFailed(message: String)
     case restoreFailed(message: String)
+    /// The initial product request (plus its automatic retries -- see
+    /// `attemptLoadPlans()`) never came back with any products. Distinct
+    /// from `purchaseFailed` so the paywall can show a dedicated "can't
+    /// load at all" screen instead of a purchase-error footnote, and so an
+    /// App Store reviewer never gets stuck on an indefinite spinner if
+    /// StoreKit is temporarily unavailable.
+    case unableToLoadProducts
 }
 
 /// Whether the signed-in user qualifies for "Continue with Your Free
@@ -58,7 +62,7 @@ final class PaywallViewModel: ObservableObject {
         switch state {
         case .purchasing, .restoring, .redeemingFreeCase:
             return true
-        case .loadingProducts, .ready, .purchaseFailed, .restoreFailed:
+        case .loadingProducts, .ready, .purchaseFailed, .restoreFailed, .unableToLoadProducts:
             return false
         }
     }
@@ -66,6 +70,13 @@ final class PaywallViewModel: ObservableObject {
     private let subscriptionService: SubscriptionService
     private let fetchFreeCaseEligibility: () async throws -> Bool
     private let redeemFreeCase: () async throws -> Void
+
+    /// Automatic retries after the initial product request fails or comes
+    /// back empty: 1 initial attempt + 2 retries before giving up and
+    /// showing `.unableToLoadProducts`.
+    private static let maxProductLoadAttempts = 3
+    private static let retryDelay: Duration = .seconds(1.5)
+    private var productLoadAttempt = 0
 
     init(subscriptionService: SubscriptionService? = nil,
          fetchFreeCaseEligibility: @escaping () async throws -> Bool = {
@@ -80,11 +91,13 @@ final class PaywallViewModel: ObservableObject {
     }
 
     /// Loads plans and the free-case eligibility check together. Call once
-    /// from the sheet's `.task`.
+    /// from the sheet's `.task`, and again from the "Try Again" action on
+    /// `.unableToLoadProducts` -- both start a fresh retry sequence.
     func load() async {
         state = .loadingProducts
         freeCaseEligibility = .checking
-        async let plansResult: Void = loadPlans()
+        productLoadAttempt = 0
+        async let plansResult: Void = attemptLoadPlans()
         async let eligibilityResult: Void = loadFreeCaseEligibility()
         _ = await (plansResult, eligibilityResult)
     }
@@ -150,12 +163,41 @@ final class PaywallViewModel: ObservableObject {
         }
     }
 
-    private func loadPlans() async {
+    /// Loads products, retrying automatically on failure or an empty
+    /// result (both are treated as "unsuccessful" -- see
+    /// `SubscriptionService.loadPlans()`) up to `maxProductLoadAttempts`
+    /// times total, ~1.5s apart, before giving up and showing
+    /// `.unableToLoadProducts`. Recurses rather than looping so each
+    /// attempt is a clean stack frame for the DEBUG logs below.
+    private func attemptLoadPlans() async {
+        productLoadAttempt += 1
+        #if DEBUG
+        print("[Paywall] Loading products (attempt \(productLoadAttempt)/\(Self.maxProductLoadAttempts)): \(SubscriptionProductID.all)")
+        #endif
         do {
-            plans = try await subscriptionService.loadPlans()
+            let loadedPlans = try await subscriptionService.loadPlans()
+            guard !loadedPlans.isEmpty else {
+                throw SubscriptionServiceError.productsUnavailable
+            }
+            #if DEBUG
+            print("[Paywall] Product load succeeded on attempt \(productLoadAttempt): \(loadedPlans.map(\.id))")
+            #endif
+            plans = loadedPlans
             state = .ready
         } catch {
-            state = .purchaseFailed(message: Self.message(for: error))
+            #if DEBUG
+            print("[Paywall] Product load attempt \(productLoadAttempt) failed: \(error)")
+            #endif
+            guard productLoadAttempt < Self.maxProductLoadAttempts else {
+                #if DEBUG
+                print("[Paywall] Exhausted \(productLoadAttempt) attempts -- entering unable-to-load state")
+                #endif
+                state = .unableToLoadProducts
+                return
+            }
+            try? await Task.sleep(for: Self.retryDelay)
+            guard !Task.isCancelled else { return }
+            await attemptLoadPlans()
         }
     }
 

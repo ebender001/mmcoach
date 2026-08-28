@@ -123,6 +123,45 @@ final class PHIFilterService {
     func redact(_ text: String) -> PHIFilterResult {
         guard !text.isEmpty else { return PHIFilterResult(redactedText: text, findings: []) }
 
+        let nsText = text as NSString
+        let located = locatedMatches(in: text)
+        guard !located.isEmpty else {
+            return PHIFilterResult(redactedText: text, findings: [])
+        }
+
+        var findings: [PHIFinding] = []
+        var redacted = ""
+        var cursor = 0
+        for match in located {
+            redacted += nsText.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            findings.append(PHIFinding(category: match.category, originalText: nsText.substring(with: match.range)))
+            redacted += match.category.placeholder
+            cursor = match.range.location + match.range.length
+        }
+        redacted += nsText.substring(from: cursor)
+
+        return PHIFilterResult(redactedText: redacted, findings: findings)
+    }
+
+    /// Same detection as `redact(_:)`, but returns each finding's character
+    /// range in `text` instead of a redacted string. Used to map findings
+    /// back to word-level recognition timing so the audio itself can be
+    /// redacted, not just displayed text -- see `AudioRedactionService`
+    /// and docs/phi-hardening-plan.md (pipeline step 4, "Map").
+    func find(in text: String) -> [PHILocatedFinding] {
+        guard !text.isEmpty else { return [] }
+        let nsText = text as NSString
+        return locatedMatches(in: text).map {
+            PHILocatedFinding(category: $0.category, originalText: nsText.substring(with: $0.range), range: $0.range)
+        }
+    }
+
+    /// Every non-overlapping PHI-shaped match in `text`, sorted by
+    /// position -- the detection logic shared by `redact(_:)` and
+    /// `find(in:)`, so it exists in exactly one place.
+    private func locatedMatches(in text: String) -> [(range: NSRange, category: PHIFinding.Category)] {
+        guard !text.isEmpty else { return [] }
+
         var matches: [(range: NSRange, category: PHIFinding.Category)] = []
         let nsText = text as NSString
         let fullRange = NSRange(location: 0, length: nsText.length)
@@ -169,26 +208,22 @@ final class PHIFilterService {
             nonOverlapping.append(match)
             lastEnd = match.range.location + match.range.length
         }
-
-        guard !nonOverlapping.isEmpty else {
-            return PHIFilterResult(redactedText: text, findings: [])
-        }
-
-        var findings: [PHIFinding] = []
-        var redacted = ""
-        var cursor = 0
-        for match in nonOverlapping {
-            redacted += nsText.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
-            findings.append(PHIFinding(category: match.category, originalText: nsText.substring(with: match.range)))
-            redacted += match.category.placeholder
-            cursor = match.range.location + match.range.length
-        }
-        redacted += nsText.substring(from: cursor)
-
-        return PHIFilterResult(redactedText: redacted, findings: findings)
+        return nonOverlapping
     }
 
     private static func isKnownMedicalTerm(_ word: String, in dictionary: MedicalDictionaryService) -> Bool {
         eponymAllowlist.contains(word.lowercased()) || dictionary.contains(word)
     }
+}
+
+/// A PHI finding with its character range in the text it was found in
+/// (NSString/UTF-16 indexed, matching Foundation's text-scanning APIs --
+/// convert with `Range(range, in: text)` for a specific `text` value).
+/// Distinct from `PHIFinding` (used by `redact(_:)`), which only carries
+/// enough to build a redacted string and a user-facing notice, not
+/// position -- see `PHIFilterService.find(in:)`.
+struct PHILocatedFinding {
+    let category: PHIFinding.Category
+    let originalText: String
+    let range: NSRange
 }

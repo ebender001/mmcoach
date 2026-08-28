@@ -64,6 +64,17 @@ final class SpeechRecognitionService: ObservableObject {
         }
     }
 
+    /// TEMPORARY diagnostic switch: when true, the primary server-based
+    /// request/task is skipped entirely and ONLY the on-device scan runs,
+    /// to determine whether the scan's "No speech detected" failure is
+    /// caused by running two concurrent recognition tasks at all (vs.
+    /// something specific to how it's fed audio -- three targeted fixes to
+    /// the latter didn't change the failure). Dictation will NOT produce a
+    /// usable transcript in the app while this is true -- console logs are
+    /// the only thing that matters. Revert to false once this question is
+    /// answered.
+    private static let debugOnDeviceScanOnlyForDiagnostics = true
+
     @Published private(set) var isRecording = false
     @Published private(set) var sessionTranscript = ""
     @Published private(set) var error: ServiceError?
@@ -188,7 +199,9 @@ final class SpeechRecognitionService: ObservableObject {
 
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
-            request.append(buffer)
+            if !Self.debugOnDeviceScanOnlyForDiagnostics {
+                request.append(buffer)
+            }
             // `AVAudioPCMBuffer` is a reference type -- handing the exact
             // same instance to a second, independent SFSpeechAudioBufferRecognitionRequest
             // is suspected of leaving it looking empty to that second
@@ -213,16 +226,18 @@ final class SpeechRecognitionService: ObservableObject {
 
         isRecording = true
 
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, taskError in
-            Task { @MainActor in
-                guard let self else { return }
-                if let result {
-                    self.sessionTranscript = result.bestTranscription.formattedString
-                }
-                if taskError != nil {
-                    self.failDictation()
-                } else if result?.isFinal ?? false {
-                    self.finishDictation()
+        if !Self.debugOnDeviceScanOnlyForDiagnostics {
+            recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, taskError in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if let result {
+                        self.sessionTranscript = result.bestTranscription.formattedString
+                    }
+                    if taskError != nil {
+                        self.failDictation()
+                    } else if result?.isFinal ?? false {
+                        self.finishDictation()
+                    }
                 }
             }
         }

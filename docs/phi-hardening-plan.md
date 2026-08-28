@@ -118,8 +118,27 @@ Detection quality gets validated *before* anything touches audio:
    the transcript's first word produced a stray leading space and no
    separator; fixed by building explicit trimmed pieces joined by one
    space rather than hand-placing spaces around substring concatenation.
-6. **Retire the old streaming-only path** once the new pipeline is validated
-   end-to-end.
+6. **Retire the old streaming-only path** ✅ (awaiting a real end-to-end
+   device pass through the actual New Case dictation UI, not just console
+   logs) -- `SpeechRecognitionService` no longer has a live server-based
+   request at all; `startDictation()` only opens a local recording file.
+   `sessionTranscript`/`isRecording` kept their existing contract, so
+   `DictationController` needed no changes (`dictationPhase` already
+   flips to `.finishingUp` the instant the trainee taps stop, independent
+   of how long the pipeline underneath takes; confirmed no View/ViewModel
+   touches `speechService` directly). Dictation now hard-requires
+   on-device recognition to be available -- there's no way to screen audio
+   for PHI locally otherwise. A hung or failed later stage falls back to
+   the on-device transcript (still text-redacted) rather than losing the
+   dictation, backed by a 45s safety-net timer.
+
+   Known tradeoffs called out rather than deferred silently:
+   - `redactAudio` runs synchronously on the main actor -- deliberate for
+     now (small files, network-dominated latency, UI already shows a wait
+     state); revisit only if real-device profiling shows it matters.
+   - `DictationController`'s "recognition stopped on its own" salvage
+     branch appears to now be unreachable dead code under the new design;
+     left in place, not in this change's scope.
 7. **Tests** -- unit tests for the finding-to-segment mapping and the
    sample-muting math (pure logic, no real audio needed); manual verification
    passes with scripted test phrases containing fake names/dates, checking

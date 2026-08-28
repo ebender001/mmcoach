@@ -225,7 +225,7 @@ final class SpeechRecognitionService: ObservableObject {
             print("[SpeechRecognitionService] pipeline fallback fired -- a later stage never completed in time")
             #endif
             if let transcript = self.lastOnDeviceTranscript {
-                self.finishDictation(text: PHIFilterService.shared.redact(transcript).redactedText)
+                await self.finishDictation(text: PHIFilterService.shared.redact(transcript).redactedText)
             } else {
                 self.failDictation()
             }
@@ -236,7 +236,26 @@ final class SpeechRecognitionService: ObservableObject {
     /// done. The one place `isRecording` becomes false on a successful
     /// path -- see type header for why callers should treat that as the
     /// signal the text is ready, not any earlier point in the pipeline.
-    private func finishDictation(text: String) {
+    ///
+    /// `async` specifically for the `Task.yield()` below -- confirmed on
+    /// real hardware that without it, the session could finish with a
+    /// fully-correct `sessionTranscript` that never made it into the app's
+    /// text field at all, with no error shown. Cause: DictationController
+    /// observes `$sessionTranscript` and `$isRecording` via two SEPARATE
+    /// `Task { for await ... }` loops; setting both properties back-to-back
+    /// with no suspension point between them does not guarantee the
+    /// `$sessionTranscript` loop's iteration (updating its
+    /// `pendingSessionTranscript`) actually runs before the `$isRecording`
+    /// loop's iteration reacts to `isRecording == false` and reads that
+    /// value. The old live-streaming design was accidentally shielded from
+    /// this by updating `sessionTranscript` many times over a session, so
+    /// even a lost race on the very last update left something close to
+    /// correct behind; this design updates it exactly once, with nothing
+    /// to fall back on if that single update loses the race. Yielding
+    /// after setting `sessionTranscript` and before setting `isRecording`
+    /// gives the transcript-observing task a guaranteed opportunity to run
+    /// first.
+    private func finishDictation(text: String) async {
         guard isRecording else { return }
         pipelineFallbackTask?.cancel()
         pipelineFallbackTask = nil
@@ -253,6 +272,7 @@ final class SpeechRecognitionService: ObservableObject {
         reTranscribeTask?.cancel()
         reTranscribeTask = nil
         sessionTranscript = text
+        await Task.yield()
         isRecording = false
     }
 
@@ -372,7 +392,7 @@ final class SpeechRecognitionService: ObservableObject {
             let segments = result.bestTranscription.segments
             Task { @MainActor in
                 self?.lastOnDeviceTranscript = transcript
-                self?.redactAndReTranscribe(sourceURL: fileURL, transcript: transcript, segments: segments)
+                await self?.redactAndReTranscribe(sourceURL: fileURL, transcript: transcript, segments: segments)
             }
         }
     }
@@ -391,7 +411,7 @@ final class SpeechRecognitionService: ObservableObject {
     /// re-transcribe upload can't run at all, falls back to the on-device
     /// transcript (text-redacted) rather than losing the dictation
     /// outright.
-    private func redactAndReTranscribe(sourceURL: URL, transcript: String, segments: [SFTranscriptionSegment]) {
+    private func redactAndReTranscribe(sourceURL: URL, transcript: String, segments: [SFTranscriptionSegment]) async {
         let located = PHIFilterService.shared.find(in: transcript)
         // SFTranscriptionSegment.substringRange is an NSRange (UTF-16
         // indexed), not a Range<String.Index> -- convert against the same
@@ -421,7 +441,7 @@ final class SpeechRecognitionService: ObservableObject {
             print("[SpeechRecognitionService] redactAudio failed: \(error) -- falling back to on-device transcript")
             #endif
             try? FileManager.default.removeItem(at: sourceURL)
-            finishDictation(text: PHIFilterService.shared.redact(transcript).redactedText)
+            await finishDictation(text: PHIFilterService.shared.redact(transcript).redactedText)
             return
         }
         try? FileManager.default.removeItem(at: sourceURL) // superseded by the redacted copy
@@ -431,7 +451,7 @@ final class SpeechRecognitionService: ObservableObject {
             print("[SpeechRecognitionService] recognizer unavailable for re-transcribe -- falling back to on-device transcript")
             #endif
             try? FileManager.default.removeItem(at: redactedURL)
-            finishDictation(text: PHIFilterService.shared.redact(transcript).redactedText)
+            await finishDictation(text: PHIFilterService.shared.redact(transcript).redactedText)
             return
         }
 
@@ -461,14 +481,14 @@ final class SpeechRecognitionService: ObservableObject {
             guard taskError == nil, let result, result.isFinal else {
                 if taskError != nil {
                     Task { @MainActor in
-                        self?.finishDictation(text: PHIFilterService.shared.redact(transcript).redactedText)
+                        await self?.finishDictation(text: PHIFilterService.shared.redact(transcript).redactedText)
                     }
                 }
                 return
             }
             Task { @MainActor in
                 let final = Self.splicedAndReScreened(reTranscribedResult: result, spans: spans)
-                self?.finishDictation(text: final)
+                await self?.finishDictation(text: final)
             }
         }
     }

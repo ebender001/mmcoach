@@ -439,8 +439,16 @@ final class SpeechRecognitionService: ObservableObject {
         reTranscribeRequest.taskHint = .dictation
         reTranscribeRequest.shouldReportPartialResults = false
         // Server-based (requiresOnDeviceRecognition left unset) so
-        // contextualStrings actually has an effect -- see type header. The
-        // audio it receives has already had every flagged span muted.
+        // contextualStrings actually has an effect when the network is
+        // available -- confirmed on real hardware that when it isn't,
+        // SFSpeechRecognizer silently falls back to on-device for this
+        // request too (taskError stays nil, isFinal still fires normally)
+        // rather than erroring -- contextualStrings just has no effect for
+        // that call, same as if it had been requested on-device directly.
+        // The explicit `taskError != nil` fallback just below this still
+        // matters for a genuine failure (e.g. a request that reaches the
+        // server but the server errors), not for "offline" specifically.
+        // The audio it receives has already had every flagged span muted.
         reTranscribeRequest.contextualStrings = medicalDictionary.contextualStringSeed
 
         reTranscribeTask = onDeviceRecognizer.recognitionTask(with: reTranscribeRequest) { [weak self] result, taskError in

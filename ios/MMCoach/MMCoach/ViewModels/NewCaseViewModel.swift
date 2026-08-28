@@ -25,7 +25,6 @@ final class NewCaseViewModel: ObservableObject {
 
     let dictation: DictationController
 
-    private let store: RecentCasesStore
     private let medicalDictionary: MedicalDictionaryService
     private let phiFilter: PHIFilterService
     private var observationTasks: [Task<Void, Never>] = []
@@ -35,12 +34,10 @@ final class NewCaseViewModel: ObservableObject {
     var isDictating: Bool { dictationPhase != .idle }
 
     init(dictation: DictationController? = nil,
-         store: RecentCasesStore? = nil,
          medicalDictionary: MedicalDictionaryService? = nil,
          phiFilter: PHIFilterService? = nil) {
         let medicalDictionary = medicalDictionary ?? .shared(for: SpecialtyStore.shared.selected)
         self.dictation = dictation ?? DictationController(medicalDictionary: medicalDictionary)
-        self.store = store ?? RecentCasesStore()
         self.medicalDictionary = medicalDictionary
         self.phiFilter = phiFilter ?? .shared
         self.dictation.onCorrectedText = { [weak self] text in
@@ -93,21 +90,11 @@ final class NewCaseViewModel: ObservableObject {
         defer { isSubmitting = false }
 
         do {
-            let created = try await BackendService.createCase(narrative: trimmed)
-            store.upsert(RecentCaseRecord(id: created.id,
-                                           title: Self.title(from: trimmed),
-                                           createdAt: Date(),
-                                           status: created.status))
-            return created
+            return try await BackendService.createCase(narrative: trimmed)
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? "Something went wrong. Please try again."
             return nil
         }
-    }
-
-    private static func title(from narrative: String) -> String {
-        let singleLine = narrative.replacingOccurrences(of: "\n", with: " ")
-        return singleLine.count > 60 ? String(singleLine.prefix(60)) + "…" : singleLine
     }
 
     private func observeDictation() {

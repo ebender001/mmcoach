@@ -88,9 +88,24 @@ struct HomeView: View {
                     .listRowInsets(rowInsets(top: 0, bottom: 4))
                     .listRowBackground(Color.clear)
 
-                if viewModel.recentCases.isEmpty {
+                if viewModel.recentCases.isEmpty, let errorMessage = viewModel.recentCasesErrorMessage {
                     Section {
-                        RecentCasesEmptyState()
+                        RecentCasesErrorState(message: errorMessage) {
+                            Task { await viewModel.refresh() }
+                        }
+                    }
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(rowInsets(top: 0, bottom: 4))
+                    .listRowBackground(Color.clear)
+                } else if viewModel.recentCases.isEmpty {
+                    Section {
+                        if viewModel.isLoadingRecentCases {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 24)
+                        } else {
+                            RecentCasesEmptyState()
+                        }
                     }
                     .listRowSeparator(.hidden)
                     .listRowInsets(rowInsets(top: 0, bottom: 4))
@@ -124,7 +139,7 @@ struct HomeView: View {
             // "Done" pop-to-root from CaseSummaryView), which is what
             // actually keeps a newly created/updated case's Recent Cases
             // entry current without restarting the app.
-            .onAppear { viewModel.refresh() }
+            .onAppear { Task { await viewModel.refresh() } }
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: AppRoute.self) { route in
                 destination(for: route)
@@ -191,7 +206,7 @@ struct HomeView: View {
         EdgeInsets(top: top, leading: 20, bottom: bottom, trailing: 20)
     }
 
-    private func open(_ record: RecentCaseRecord) {
+    private func open(_ record: RecentCaseSummary) {
         switch record.status {
         case .completed:
             path.append(.summary(caseId: record.id, initialCase: nil))
@@ -218,19 +233,11 @@ struct HomeView: View {
 #if DEBUG
 private enum HomeViewPreviewFactory {
     static func populated() -> HomeView {
-        let store = RecentCasesStore(defaults: {
-            let defaults = UserDefaults(suiteName: "HomeView.Populated.Preview")!
-            defaults.removePersistentDomain(forName: "HomeView.Populated.Preview")
-            return defaults
-        }())
-        for record in [
-            RecentCaseRecord(id: "1", title: "68-year-old man, CABG x3, postoperative bleeding", createdAt: Date(), status: .collectingInformation),
-            RecentCaseRecord(id: "2", title: "54-year-old woman, laparoscopic cholecystectomy, bile leak", createdAt: Date().addingTimeInterval(-86_400), status: .readyToFinalize),
-            RecentCaseRecord(id: "3", title: "72-year-old man, AAA repair, postoperative MI", createdAt: Date().addingTimeInterval(-172_800), status: .completed)
-        ] {
-            store.upsert(record)
-        }
-        return HomeView(viewModel: HomeViewModel(store: store))
+        HomeView(viewModel: HomeViewModel(previewRecentCases: [
+            RecentCaseSummary(id: "1", title: "68-year-old man, CABG x3, postoperative bleeding", createdAt: Date(), status: .collectingInformation),
+            RecentCaseSummary(id: "2", title: "54-year-old woman, laparoscopic cholecystectomy, bile leak", createdAt: Date().addingTimeInterval(-86_400), status: .readyToFinalize),
+            RecentCaseSummary(id: "3", title: "72-year-old man, AAA repair, postoperative MI", createdAt: Date().addingTimeInterval(-172_800), status: .completed)
+        ]))
     }
 }
 

@@ -95,6 +95,7 @@ function createFakeParse() {
       this.targetClassName = ObjectClass && ObjectClass.className;
       this.conditions = [];
       this.order = null;
+      this.limitCount = null;
     }
     equalTo(key, value) {
       this.conditions.push({ key, value });
@@ -102,6 +103,10 @@ function createFakeParse() {
     }
     descending(key) {
       this.order = { key, direction: -1 };
+      return this;
+    }
+    limit(count) {
+      this.limitCount = count;
       return this;
     }
     async get(id) {
@@ -121,6 +126,9 @@ function createFakeParse() {
       if (this.order) {
         const { key, direction } = this.order;
         results = [...results].sort((a, b) => (a[key] > b[key] ? 1 : a[key] < b[key] ? -1 : 0) * direction);
+      }
+      if (typeof this.limitCount === 'number') {
+        results = results.slice(0, this.limitCount);
       }
       return results;
     }

@@ -19,6 +19,15 @@ enum CaseStatus: String, Codable, Hashable {
     case completed = "completed"
 }
 
+/// One PubMed lookup the backend has already run for a reference topic on
+/// this case, returned inline on the case so the client can skip
+/// `mmFindReferences` entirely for a topic it's already searched. Only
+/// `results` is decoded -- `query`/`cachedAt` are backend-internal detail
+/// the client has no use for.
+struct CachedReferenceLookup: Decodable, Hashable {
+    let results: [PubMedReference]
+}
+
 struct MMCase: Decodable, Identifiable, Hashable {
     let id: String
     var status: CaseStatus
@@ -27,6 +36,15 @@ struct MMCase: Decodable, Identifiable, Hashable {
     var discussionPreparation: [DiscussionTopic]
     var likelyFacultyQuestions: [String]
     var references: [ReferenceItem]
+    /// Faculty questions already answered on this case, keyed by the
+    /// question's exact text -- lets the client show a cached answer
+    /// (see FacultyQuestionAnswerViewModel) without calling
+    /// `mmAnswerFacultyQuestion` again for a question already answered.
+    var facultyQuestionAnswers: [String: String]
+    /// Reference topics already looked up on this case, keyed by topic --
+    /// lets the client skip `mmFindReferences` for a topic already
+    /// searched (see ReferenceLookupViewModel).
+    var referenceLookups: [String: CachedReferenceLookup]
 
     private enum CodingKeys: String, CodingKey {
         case id = "caseId"
@@ -36,6 +54,8 @@ struct MMCase: Decodable, Identifiable, Hashable {
         case discussionPreparation
         case likelyFacultyQuestions
         case references
+        case facultyQuestionAnswers
+        case referenceLookups
     }
 
     init(from decoder: Decoder) throws {
@@ -47,6 +67,8 @@ struct MMCase: Decodable, Identifiable, Hashable {
         discussionPreparation = try container.decodeIfPresent([DiscussionTopic].self, forKey: .discussionPreparation) ?? []
         likelyFacultyQuestions = try container.decodeIfPresent([String].self, forKey: .likelyFacultyQuestions) ?? []
         references = try container.decodeIfPresent([ReferenceItem].self, forKey: .references) ?? []
+        facultyQuestionAnswers = try container.decodeIfPresent([String: String].self, forKey: .facultyQuestionAnswers) ?? [:]
+        referenceLookups = try container.decodeIfPresent([String: CachedReferenceLookup].self, forKey: .referenceLookups) ?? [:]
     }
 
     /// Convenience initializer for previews and tests.
@@ -56,7 +78,9 @@ struct MMCase: Decodable, Identifiable, Hashable {
          polishedNarrative: String? = nil,
          discussionPreparation: [DiscussionTopic] = [],
          likelyFacultyQuestions: [String] = [],
-         references: [ReferenceItem] = []) {
+         references: [ReferenceItem] = [],
+         facultyQuestionAnswers: [String: String] = [:],
+         referenceLookups: [String: CachedReferenceLookup] = [:]) {
         self.id = id
         self.status = status
         self.nextQuestion = nextQuestion
@@ -64,5 +88,7 @@ struct MMCase: Decodable, Identifiable, Hashable {
         self.discussionPreparation = discussionPreparation
         self.likelyFacultyQuestions = likelyFacultyQuestions
         self.references = references
+        self.facultyQuestionAnswers = facultyQuestionAnswers
+        self.referenceLookups = referenceLookups
     }
 }

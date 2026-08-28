@@ -38,6 +38,8 @@ function toClientJSON(parseObject) {
     discussionPreparation: parseObject.get('discussionPreparation') || [],
     likelyFacultyQuestions: parseObject.get('likelyFacultyQuestions') || [],
     references: parseObject.get('references') || [],
+    facultyQuestionAnswers: parseObject.get('facultyQuestionAnswers') || {},
+    referenceLookups: parseObject.get('referenceLookups') || {},
     promptVersion: parseObject.get('promptVersion') || {},
     aiModel: parseObject.get('aiModel') || null,
     aiCostUSD: parseObject.get('aiCostUSD') || 0,
@@ -118,6 +120,23 @@ async function incrementAIUsage(caseId, { costUSD, totalTokens }) {
 }
 
 /**
+ * Every case owned by a user, most recent first -- the single source of
+ * truth for the client's "Recent Cases" list (see caseService#listCases).
+ * Returns full case JSON (same shape as getById); callers that only need
+ * list-row fields pick those out themselves rather than this trimming the
+ * shape, so there's one case JSON shape everywhere.
+ */
+async function listForOwner(ownerId) {
+  const MMCase = getMMCaseClass();
+  const query = new Parse.Query(MMCase);
+  query.equalTo('owner', Parse.User.createWithoutData(ownerId));
+  query.descending('createdAt');
+  query.limit(200);
+  const cases = await query.find({ useMasterKey: true });
+  return cases.map(toClientJSON);
+}
+
+/**
  * Number of cases owned by a user, regardless of status. Used to decide
  * first-case-free eligibility -- the backend is the source of truth for
  * this, never an on-device count.
@@ -152,6 +171,7 @@ module.exports = {
   getById,
   update,
   incrementAIUsage,
+  listForOwner,
   countByOwner,
   deleteAllForOwner,
   toClientJSON,

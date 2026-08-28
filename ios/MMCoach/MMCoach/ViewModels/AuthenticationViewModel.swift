@@ -200,7 +200,7 @@ final class AuthenticationViewModel: ObservableObject {
 
     /// Clears the local Parse session (see `ParseAuthenticationService`)
     /// and returns to the Welcome screen. Never touches case data --
-    /// `RecentCasesStore` and any in-flight case on the backend are
+    /// `HiddenCaseIdsStore` and any in-flight case on the backend are
     /// untouched.
     ///
     /// Moves to `.endingSession` *before* the network call (rather than

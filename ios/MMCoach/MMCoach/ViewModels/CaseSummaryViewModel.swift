@@ -14,6 +14,15 @@ final class CaseSummaryViewModel: ObservableObject {
     @Published private(set) var discussionPreparation: [DiscussionTopic]
     @Published private(set) var likelyFacultyQuestions: [String]
     @Published private(set) var references: [ReferenceItem]
+    /// Faculty questions already answered on this case, keyed by question
+    /// text -- passed down to FacultyQuestionsView so a cached answer
+    /// skips `mmAnswerFacultyQuestion` entirely (see
+    /// FacultyQuestionAnswerViewModel).
+    @Published private(set) var facultyQuestionAnswers: [String: String]
+    /// Reference topics already looked up on this case, keyed by topic --
+    /// passed down to ReferencesView so a cached lookup skips
+    /// `mmFindReferences` entirely (see ReferenceLookupViewModel).
+    @Published private(set) var referenceLookups: [String: CachedReferenceLookup]
     @Published private(set) var isLoading: Bool
     @Published var errorMessage: String?
     @Published private(set) var isSavingNarrative = false
@@ -28,6 +37,8 @@ final class CaseSummaryViewModel: ObservableObject {
         self.discussionPreparation = initialCase?.discussionPreparation ?? []
         self.likelyFacultyQuestions = initialCase?.likelyFacultyQuestions ?? []
         self.references = initialCase?.references ?? []
+        self.facultyQuestionAnswers = initialCase?.facultyQuestionAnswers ?? [:]
+        self.referenceLookups = initialCase?.referenceLookups ?? [:]
         self.isLoading = initialCase == nil
     }
 
@@ -39,6 +50,8 @@ final class CaseSummaryViewModel: ObservableObject {
             discussionPreparation = result.discussionPreparation
             likelyFacultyQuestions = result.likelyFacultyQuestions
             references = result.references
+            facultyQuestionAnswers = result.facultyQuestionAnswers
+            referenceLookups = result.referenceLookups
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? "Something went wrong. Please try again."
         }

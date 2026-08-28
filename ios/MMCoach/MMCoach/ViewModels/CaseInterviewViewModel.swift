@@ -36,7 +36,6 @@ final class CaseInterviewViewModel: ObservableObject {
 
     let dictation: DictationController
 
-    private let store: RecentCasesStore
     private let medicalDictionary: MedicalDictionaryService
     private let phiFilter: PHIFilterService
     private var observationTasks: [Task<Void, Never>] = []
@@ -50,13 +49,11 @@ final class CaseInterviewViewModel: ObservableObject {
     ///   fetch current state via `loadIfNeeded()`.
     init(caseId: String,
          initialCase: MMCase?,
-         store: RecentCasesStore? = nil,
          dictation: DictationController? = nil,
          medicalDictionary: MedicalDictionaryService? = nil,
          phiFilter: PHIFilterService? = nil) {
         let medicalDictionary = medicalDictionary ?? .shared(for: SpecialtyStore.shared.selected)
         self.caseId = caseId
-        self.store = store ?? RecentCasesStore()
         self.status = initialCase?.status ?? .collectingInformation
         self.currentQuestion = initialCase?.nextQuestion
         self.isLoadingCase = initialCase == nil
@@ -146,7 +143,6 @@ final class CaseInterviewViewModel: ObservableObject {
     private func apply(_ result: MMCase) {
         status = result.status
         currentQuestion = result.nextQuestion
-        store.updateStatus(id: caseId, status: result.status)
     }
 
     private static func message(for error: Error) -> String {

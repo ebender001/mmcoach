@@ -13,6 +13,9 @@ import SwiftUI
 struct ReferencesView: View {
     let references: [ReferenceItem]
     let caseId: String?
+    /// PubMed lookups the backend has already run for these topics on
+    /// this case, keyed by topic -- see ReferenceLookupViewModel.
+    let cachedLookups: [String: CachedReferenceLookup]
 
     var body: some View {
         ScrollView {
@@ -28,7 +31,10 @@ struct ReferencesView: View {
                 } else {
                     ForEach(Array(references.enumerated()), id: \.offset) { _, reference in
                         NavigationLink {
-                            ReferenceLookupView(topic: reference.topic, searchIntent: reference.searchIntent, caseId: caseId)
+                            ReferenceLookupView(topic: reference.topic,
+                                                 searchIntent: reference.searchIntent,
+                                                 caseId: caseId,
+                                                 cachedResults: cachedLookups[reference.topic]?.results)
                         } label: {
                             referenceRow(reference)
                         }
@@ -106,7 +112,8 @@ private extension LabelStyle where Self == TrailingIconLabelStyle {
                               citation: nil,
                               verified: false)
             ],
-            caseId: "preview"
+            caseId: "preview",
+            cachedLookups: [:]
         )
     }
 }

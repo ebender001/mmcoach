@@ -12,8 +12,8 @@ import SwiftUI
 struct FacultyQuestionAnswerView: View {
     @StateObject private var viewModel: FacultyQuestionAnswerViewModel
 
-    init(question: String, caseId: String) {
-        _viewModel = StateObject(wrappedValue: FacultyQuestionAnswerViewModel(question: question, caseId: caseId))
+    init(question: String, caseId: String, cachedAnswer: String? = nil) {
+        _viewModel = StateObject(wrappedValue: FacultyQuestionAnswerViewModel(question: question, caseId: caseId, cachedAnswer: cachedAnswer))
     }
 
     var body: some View {
@@ -55,6 +55,18 @@ struct FacultyQuestionAnswerView: View {
         FacultyQuestionAnswerView(
             question: "What prompted the decision to obtain imaging at that point?",
             caseId: "preview"
+        )
+    }
+}
+
+// Unlike "Answer" above, this never touches BackendService at all -- a
+// cached answer renders immediately from the case's own data.
+#Preview("Cached Answer") {
+    NavigationStack {
+        FacultyQuestionAnswerView(
+            question: "What prompted the decision to obtain imaging at that point?",
+            caseId: "preview",
+            cachedAnswer: "Imaging was obtained once transfusion requirements began escalating despite initial resuscitation."
         )
     }
 }

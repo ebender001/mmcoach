@@ -13,6 +13,9 @@ import SwiftUI
 struct FacultyQuestionsView: View {
     let questions: [String]
     let caseId: String
+    /// Answers the backend has already generated for these questions,
+    /// keyed by question text -- see FacultyQuestionAnswerViewModel.
+    let cachedAnswers: [String: String]
 
     var body: some View {
         ScrollView {
@@ -28,7 +31,7 @@ struct FacultyQuestionsView: View {
                 } else {
                     ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
                         NavigationLink {
-                            FacultyQuestionAnswerView(question: question, caseId: caseId)
+                            FacultyQuestionAnswerView(question: question, caseId: caseId, cachedAnswer: cachedAnswers[question])
                         } label: {
                             questionCard(number: index + 1, question: question)
                         }
@@ -72,7 +75,8 @@ struct FacultyQuestionsView: View {
                 "Was there an earlier finding that should have changed management?",
                 "Would you manage this differently today?"
             ],
-            caseId: "preview"
+            caseId: "preview",
+            cachedAnswers: [:]
         )
     }
 }

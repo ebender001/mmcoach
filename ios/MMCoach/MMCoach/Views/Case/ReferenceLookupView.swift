@@ -14,8 +14,8 @@ import SwiftUI
 struct ReferenceLookupView: View {
     @StateObject private var viewModel: ReferenceLookupViewModel
 
-    init(topic: String, searchIntent: String, caseId: String?) {
-        _viewModel = StateObject(wrappedValue: ReferenceLookupViewModel(topic: topic, searchIntent: searchIntent, caseId: caseId))
+    init(topic: String, searchIntent: String, caseId: String?, cachedResults: [PubMedReference]? = nil) {
+        _viewModel = StateObject(wrappedValue: ReferenceLookupViewModel(topic: topic, searchIntent: searchIntent, caseId: caseId, cachedResults: cachedResults))
     }
 
     var body: some View {
@@ -154,6 +154,21 @@ struct ReferenceLookupView: View {
             topic: "Postoperative bleeding after cardiac surgery",
             searchIntent: "Current guideline or high-quality evidence regarding indications and timing for surgical re-exploration.",
             caseId: "preview"
+        )
+    }
+}
+
+// Unlike "Results" above, this never touches BackendService at all -- a
+// cached lookup renders immediately from the case's own data.
+#Preview("Cached Results") {
+    NavigationStack {
+        ReferenceLookupView(
+            topic: "Postoperative bleeding after cardiac surgery",
+            searchIntent: "Current guideline or high-quality evidence regarding indications and timing for surgical re-exploration.",
+            caseId: "preview",
+            cachedResults: [
+                PubMedReference(pmid: "111", title: "A relevant paper", authors: ["Smith J"], journal: "J Surg", year: "2020", abstractSections: [PubMedAbstractSection(label: nil, text: "Abstract text.")], url: "https://pubmed.ncbi.nlm.nih.gov/111/")
+            ]
         )
     }
 }

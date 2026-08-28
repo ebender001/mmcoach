@@ -19,6 +19,7 @@ require('../cloud/functions/createCase');
 require('../cloud/functions/answerQuestion');
 require('../cloud/functions/finalizeCase');
 require('../cloud/functions/getCase');
+require('../cloud/functions/listCases');
 require('../cloud/functions/checkFreeCaseEligibility');
 require('../cloud/functions/redeemFreeCase');
 require('../cloud/functions/updatePolishedNarrative');
@@ -203,6 +204,25 @@ describe('mmGetCase', () => {
 
     expect(caseService.getCase).toHaveBeenCalledWith({ caseId: 'abc123', ownerId: 'user1' });
     expect(result.caseId).toBe('abc123');
+  });
+});
+
+describe('mmListCases', () => {
+  it('rejects an unauthenticated request without calling the service', async () => {
+    await expect(cloudRegistry.mmListCases({ params: {} })).rejects.toMatchObject({ code: Parse.Error.INVALID_SESSION_TOKEN });
+    expect(caseService.listCases).not.toHaveBeenCalled();
+  });
+
+  it('returns the caller\'s cases wrapped in a cases array', async () => {
+    caseService.listCases.mockResolvedValue([
+      { caseId: 'case1', title: 'A 68-year-old man...', status: 'completed', createdAt: new Date(), updatedAt: new Date() },
+    ]);
+
+    const result = await cloudRegistry.mmListCases({ params: {}, user: AUTH_USER });
+
+    expect(caseService.listCases).toHaveBeenCalledWith({ ownerId: 'user1' });
+    expect(result.cases).toHaveLength(1);
+    expect(result.cases[0].caseId).toBe('case1');
   });
 });
 
@@ -430,30 +450,61 @@ describe('mmFindReferences', () => {
     expect(result.results).toHaveLength(1);
   });
 
-  it('verifies case ownership and records AI usage when caseId is provided', async () => {
+  it('verifies case ownership, records AI usage, and caches the result when caseId is provided', async () => {
     referenceQueryBuilder.buildQuery.mockResolvedValue({
       query: 'postoperative bleeding[tiab]',
       meta: AI_QUERY_META,
     });
-    pubmedService.findReferences.mockResolvedValue([]);
-    caseService.getCase.mockResolvedValue({ objectId: 'case1', ownerId: 'user1' });
+    pubmedService.findReferences.mockResolvedValue([{ pmid: '111' }]);
+    caseService.getCachedReferenceLookup.mockResolvedValue({
+      caseState: { objectId: 'case1', ownerId: 'user1', referenceLookups: {} },
+      cached: null,
+    });
 
     await cloudRegistry.mmFindReferences({
       params: { topic: 'Postoperative bleeding', caseId: 'case1' },
       user: AUTH_USER,
     });
 
-    expect(caseService.getCase).toHaveBeenCalledWith({ caseId: 'case1', ownerId: 'user1' });
+    expect(caseService.getCachedReferenceLookup).toHaveBeenCalledWith({
+      caseId: 'case1',
+      ownerId: 'user1',
+      topic: 'Postoperative bleeding',
+    });
     expect(caseService.recordAIUsage).toHaveBeenCalledWith({
       caseId: 'case1',
       ownerId: 'user1',
       operation: 'buildReferenceQuery',
       meta: AI_QUERY_META,
     });
+    expect(caseService.cacheReferenceLookup).toHaveBeenCalledWith({
+      caseId: 'case1',
+      existingLookups: {},
+      topic: 'Postoperative bleeding',
+      query: 'postoperative bleeding[tiab]',
+      results: [{ pmid: '111' }],
+    });
+  });
+
+  it('returns a cached lookup with no AI or PubMed call when this topic was already searched for this case', async () => {
+    caseService.getCachedReferenceLookup.mockResolvedValue({
+      caseState: { objectId: 'case1', ownerId: 'user1', referenceLookups: { 'Postoperative bleeding': { results: [{ pmid: '999' }] } } },
+      cached: { query: 'postoperative bleeding[tiab]', results: [{ pmid: '999' }] },
+    });
+
+    const result = await cloudRegistry.mmFindReferences({
+      params: { topic: 'Postoperative bleeding', caseId: 'case1' },
+      user: AUTH_USER,
+    });
+
+    expect(referenceQueryBuilder.buildQuery).not.toHaveBeenCalled();
+    expect(pubmedService.findReferences).not.toHaveBeenCalled();
+    expect(caseService.recordAIUsage).not.toHaveBeenCalled();
+    expect(result).toEqual({ topic: 'Postoperative bleeding', results: [{ pmid: '999' }] });
   });
 
   it('propagates NotFoundError when caseId does not belong to the caller', async () => {
-    caseService.getCase.mockRejectedValue(new NotFoundError('No case found with id case1.'));
+    caseService.getCachedReferenceLookup.mockRejectedValue(new NotFoundError('No case found with id case1.'));
 
     await expect(
       cloudRegistry.mmFindReferences({ params: { topic: 'Postoperative bleeding', caseId: 'case1' }, user: AUTH_USER })

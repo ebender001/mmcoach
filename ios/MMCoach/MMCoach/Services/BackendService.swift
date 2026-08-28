@@ -95,11 +95,17 @@ enum BackendService {
         try await run(GetCaseFunction(caseId: caseId))
     }
 
+    /// Every case the signed-in trainee owns, most recent first -- the
+    /// single source of truth for the Home screen's Recent Cases list.
+    static func listCases() async throws -> [RecentCaseSummary] {
+        try await run(ListCasesFunction()).cases
+    }
+
     /// Whether a free first case is available -- true only if this
     /// account owns zero cases AND this device (see
     /// `DeviceIdentifierService`) has never redeemed one before, even
     /// under a different/deleted account. Never derive this from
-    /// `RecentCasesStore` (a local, per-device case cache) or any other
+    /// `listCases()` (which could be slow/offline) or any other
     /// on-device signal.
     static func checkFreeCaseEligibility(deviceId: String) async throws -> Bool {
         try await run(CheckFreeCaseEligibilityFunction(deviceId: deviceId)).eligible
@@ -205,6 +211,15 @@ private struct GetCaseFunction: ParseCloudable {
     typealias ReturnType = MMCase
     var functionJobName = "mmGetCase"
     var caseId: String
+}
+
+private struct ListCasesResponse: Decodable {
+    let cases: [RecentCaseSummary]
+}
+
+private struct ListCasesFunction: ParseCloudable {
+    typealias ReturnType = ListCasesResponse
+    var functionJobName = "mmListCases"
 }
 
 private struct FreeCaseEligibilityResponse: Decodable {

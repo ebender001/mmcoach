@@ -7,6 +7,7 @@ require('./functions/createCase');
 require('./functions/answerQuestion');
 require('./functions/finalizeCase');
 require('./functions/getCase');
+require('./functions/listCases');
 require('./functions/checkFreeCaseEligibility');
 require('./functions/redeemFreeCase');
 require('./functions/updatePolishedNarrative');

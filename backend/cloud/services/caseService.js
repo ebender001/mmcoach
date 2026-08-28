@@ -14,6 +14,7 @@ const facultyQuestionAnswerer = require('../ai/facultyQuestionAnswerer');
 const { CaseStatus } = require('../schemas/caseStatus');
 const { NotFoundError, InvalidStateError } = require('../utils/errors');
 const { generateId } = require('../utils/idGenerator');
+const { deriveTitle } = require('../utils/caseTitle');
 const logger = require('../utils/logger');
 
 /**
@@ -136,6 +137,8 @@ async function createCase({ narrative, ownerId }) {
     discussionPreparation: [],
     likelyFacultyQuestions: [],
     references: [],
+    facultyQuestionAnswers: {},
+    referenceLookups: {},
     promptVersion: { analyze: analysis.promptVersion },
     aiModel: analysis.meta.model,
   });
@@ -266,13 +269,18 @@ async function updatePolishedNarrative({ caseId, ownerId, polishedNarrative }) {
 
 /**
  * Drafts a model answer to one of the case's own likely faculty questions,
- * grounded in that case's details -- an on-demand rehearsal aid, not
- * persisted onto the case. Mirrors mmFindReferences: computed fresh each
- * time and its cost rolled into the case's running AI total, rather than
- * being folded into finalizeCase's output.
+ * grounded in that case's details -- an on-demand rehearsal aid. Cached
+ * on the case per question text once computed: a repeat request for the
+ * same question (revisiting the tab, reopening the case) returns the
+ * stored answer straight from the case record, with no AI call at all.
  */
 async function answerFacultyQuestion({ caseId, ownerId, question }) {
   const caseState = await getOwnedCase(caseId, ownerId);
+  const cachedAnswer = caseState.facultyQuestionAnswers && caseState.facultyQuestionAnswers[question];
+  if (cachedAnswer) {
+    return { question, answer: cachedAnswer };
+  }
+
   const result = await facultyQuestionAnswerer.answerQuestion({
     extractedCase: caseState.extractedCase,
     conversation: caseState.conversation,
@@ -281,7 +289,51 @@ async function answerFacultyQuestion({ caseId, ownerId, question }) {
     caseId,
   });
   await recordAIUsage({ caseId, ownerId, operation: 'answerFacultyQuestion', meta: result.meta });
+  await caseRepository.update(caseId, {
+    facultyQuestionAnswers: { ...caseState.facultyQuestionAnswers, [question]: result.answer },
+  });
   return { question, answer: result.answer };
+}
+
+/**
+ * Returns a previously-cached PubMed lookup for a reference topic, or
+ * null if this topic hasn't been searched for this case before. Checked
+ * by mmFindReferences before spending an AI call building a query or
+ * hitting PubMed again for a topic the trainee has already looked up.
+ */
+async function getCachedReferenceLookup({ caseId, ownerId, topic }) {
+  const caseState = await getOwnedCase(caseId, ownerId);
+  const cached = caseState.referenceLookups && caseState.referenceLookups[topic];
+  return { caseState, cached: cached || null };
+}
+
+/**
+ * Persists a freshly-computed PubMed lookup (AI-built query + results)
+ * for a reference topic, keyed by topic, so the next lookup of that same
+ * topic on this case is served from cache instead of repeating the AI
+ * call. `existingLookups` is the case's `referenceLookups` as already
+ * fetched by the caller (getCachedReferenceLookup) -- passed in rather
+ * than re-fetched, since the caller already has it from the cache-miss
+ * check moments earlier in the same request.
+ */
+async function cacheReferenceLookup({ caseId, existingLookups, topic, query, results }) {
+  const referenceLookups = {
+    ...(existingLookups || {}),
+    [topic]: { query, results, cachedAt: new Date().toISOString() },
+  };
+  await caseRepository.update(caseId, { referenceLookups });
+}
+
+/** Every case owned by the caller, most recent first -- the Home screen's Recent Cases list. */
+async function listCases({ ownerId }) {
+  const cases = await caseRepository.listForOwner(ownerId);
+  return cases.map((caseState) => ({
+    caseId: caseState.objectId,
+    title: deriveTitle(caseState.originalNarrative),
+    status: caseState.status,
+    createdAt: caseState.createdAt,
+    updatedAt: caseState.updatedAt,
+  }));
 }
 
 /** Per-case AI cost: the running total plus every individual call. */
@@ -315,6 +367,8 @@ function formatFinalizedCase(caseState) {
     discussionPreparation: caseState.discussionPreparation,
     likelyFacultyQuestions: caseState.likelyFacultyQuestions,
     references: caseState.references,
+    facultyQuestionAnswers: caseState.facultyQuestionAnswers,
+    referenceLookups: caseState.referenceLookups,
   };
 }
 
@@ -331,6 +385,8 @@ function formatFullCase(caseState) {
     discussionPreparation: caseState.discussionPreparation,
     likelyFacultyQuestions: caseState.likelyFacultyQuestions,
     references: caseState.references,
+    facultyQuestionAnswers: caseState.facultyQuestionAnswers,
+    referenceLookups: caseState.referenceLookups,
     promptVersion: caseState.promptVersion,
     aiModel: caseState.aiModel,
     createdAt: caseState.createdAt,
@@ -348,6 +404,9 @@ module.exports = {
   updatePolishedNarrative,
   getCaseAICost,
   answerFacultyQuestion,
+  getCachedReferenceLookup,
+  cacheReferenceLookup,
+  listCases,
   recordAIUsage,
   formatCaseSummary,
   formatFinalizedCase,

@@ -9,7 +9,7 @@ import SwiftUI
 /// (not red) since "In Progress" is a routine, expected state here -- not
 /// a warning.
 struct RecentCaseRow: View {
-    let record: RecentCaseRecord
+    let record: RecentCaseSummary
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -71,9 +71,9 @@ struct RecentCaseRow: View {
 
 #Preview {
     VStack(spacing: 10) {
-        RecentCaseRow(record: RecentCaseRecord(id: "1", title: "68-year-old man, CABG x3, postoperative bleeding", createdAt: Date(), status: .collectingInformation))
-        RecentCaseRow(record: RecentCaseRecord(id: "2", title: "54-year-old woman, laparoscopic cholecystectomy, bile leak", createdAt: Date(), status: .readyToFinalize))
-        RecentCaseRow(record: RecentCaseRecord(id: "3", title: "72-year-old man, AAA repair, postoperative MI", createdAt: Date(), status: .completed))
+        RecentCaseRow(record: RecentCaseSummary(id: "1", title: "68-year-old man, CABG x3, postoperative bleeding", createdAt: Date(), status: .collectingInformation))
+        RecentCaseRow(record: RecentCaseSummary(id: "2", title: "54-year-old woman, laparoscopic cholecystectomy, bile leak", createdAt: Date(), status: .readyToFinalize))
+        RecentCaseRow(record: RecentCaseSummary(id: "3", title: "72-year-old man, AAA repair, postoperative MI", createdAt: Date(), status: .completed))
     }
     .padding()
     .background(Color.warmBackground)

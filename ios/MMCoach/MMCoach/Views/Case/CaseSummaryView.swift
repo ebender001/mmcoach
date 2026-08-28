@@ -106,9 +106,13 @@ struct CaseSummaryView: View {
         case .prepare:
             DiscussionPrepView(topics: viewModel.discussionPreparation)
         case .questions:
-            FacultyQuestionsView(questions: viewModel.likelyFacultyQuestions, caseId: viewModel.caseId)
+            FacultyQuestionsView(questions: viewModel.likelyFacultyQuestions,
+                                 caseId: viewModel.caseId,
+                                 cachedAnswers: viewModel.facultyQuestionAnswers)
         case .references:
-            ReferencesView(references: viewModel.references, caseId: viewModel.caseId)
+            ReferencesView(references: viewModel.references,
+                            caseId: viewModel.caseId,
+                            cachedLookups: viewModel.referenceLookups)
         }
     }
 }

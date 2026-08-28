@@ -18,9 +18,14 @@ final class FacultyQuestionAnswerViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
-    init(question: String, caseId: String) {
+    /// - Parameter cachedAnswer: An answer the backend already generated
+    ///   and returned inline on the case (`MMCase.facultyQuestionAnswers`).
+    ///   When present, `loadAnswer()` never calls the backend at all --
+    ///   this is exactly the answer `mmAnswerFacultyQuestion` would return.
+    init(question: String, caseId: String, cachedAnswer: String? = nil) {
         self.question = question
         self.caseId = caseId
+        self.answer = cachedAnswer
     }
 
     func loadAnswer() async {

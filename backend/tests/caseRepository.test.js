@@ -93,4 +93,38 @@ describe('caseRepository', () => {
     expect(updated.originalNarrative).toBe('narrative text');
     expect(updated.extractedCase).toEqual({ procedure: 'CABG' });
   });
+
+  it('defaults facultyQuestionAnswers and referenceLookups to empty objects', async () => {
+    const created = await caseRepository.create(baseRecord());
+
+    expect(created.facultyQuestionAnswers).toEqual({});
+    expect(created.referenceLookups).toEqual({});
+  });
+
+  describe('listForOwner', () => {
+    // Distinct owner ids from every other test in this file -- the fake
+    // Parse store is shared module-wide with no reset between tests, and
+    // this is the only test that queries broadly by owner rather than by
+    // a specific known object id, so it must not collide with the
+    // 'user1' cases other tests leave behind in that shared store.
+    it('returns only the given owner\'s cases, most recent first', async () => {
+      const wait = () => new Promise((resolve) => setTimeout(resolve, 2));
+
+      await caseRepository.create(baseRecord({ ownerId: 'listforowner-user', originalNarrative: 'first' }));
+      await wait();
+      await caseRepository.create(baseRecord({ ownerId: 'listforowner-other', originalNarrative: 'not this one' }));
+      await wait();
+      await caseRepository.create(baseRecord({ ownerId: 'listforowner-user', originalNarrative: 'second' }));
+
+      const cases = await caseRepository.listForOwner('listforowner-user');
+
+      expect(cases).toHaveLength(2);
+      expect(cases.map((c) => c.originalNarrative)).toEqual(['second', 'first']);
+      expect(cases.every((c) => c.ownerId === 'listforowner-user')).toBe(true);
+    });
+
+    it('returns an empty array for an owner with no cases', async () => {
+      expect(await caseRepository.listForOwner('listforowner-nobody')).toEqual([]);
+    });
+  });
 });

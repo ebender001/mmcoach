@@ -28,6 +28,8 @@ function baseCaseState(overrides = {}) {
     discussionPreparation: [],
     likelyFacultyQuestions: [],
     references: [],
+    facultyQuestionAnswers: {},
+    referenceLookups: {},
     promptVersion: {},
     aiModel: 'gpt-test',
     createdAt: new Date(),
@@ -420,10 +422,109 @@ describe('answerFacultyQuestion', () => {
     expect(aiCostRepository.record).toHaveBeenCalledWith(
       expect.objectContaining({ caseId: 'case1', ownerId: 'user1', operation: 'answerFacultyQuestion' })
     );
+    expect(caseRepository.update).toHaveBeenCalledWith('case1', {
+      facultyQuestionAnswers: { 'What prompted the decision to obtain imaging at that point?': 'Imaging was obtained once transfusion requirements began escalating.' },
+    });
     expect(result).toEqual({
       question: 'What prompted the decision to obtain imaging at that point?',
       answer: 'Imaging was obtained once transfusion requirements began escalating.',
     });
+  });
+
+  it('returns a cached answer with no AI call when this question was already answered', async () => {
+    const state = baseCaseState({
+      facultyQuestionAnswers: { 'Why now?': 'Because transfusion requirements were escalating.' },
+    });
+    caseRepository.getById.mockResolvedValue(state);
+
+    const result = await caseService.answerFacultyQuestion({ caseId: 'case1', ownerId: 'user1', question: 'Why now?' });
+
+    expect(facultyQuestionAnswerer.answerQuestion).not.toHaveBeenCalled();
+    expect(aiCostRepository.record).not.toHaveBeenCalled();
+    expect(caseRepository.update).not.toHaveBeenCalled();
+    expect(result).toEqual({ question: 'Why now?', answer: 'Because transfusion requirements were escalating.' });
+  });
+});
+
+describe('reference lookup caching', () => {
+  it('getCachedReferenceLookup returns null when the topic has not been searched before', async () => {
+    caseRepository.getById.mockResolvedValue(baseCaseState());
+
+    const { cached } = await caseService.getCachedReferenceLookup({ caseId: 'case1', ownerId: 'user1', topic: 'Postoperative bleeding' });
+
+    expect(cached).toBeNull();
+  });
+
+  it('getCachedReferenceLookup returns a previously cached lookup for that topic', async () => {
+    const cachedLookup = { query: 'postoperative bleeding[tiab]', results: [{ pmid: '111' }], cachedAt: '2026-01-01T00:00:00.000Z' };
+    caseRepository.getById.mockResolvedValue(baseCaseState({ referenceLookups: { 'Postoperative bleeding': cachedLookup } }));
+
+    const { cached } = await caseService.getCachedReferenceLookup({ caseId: 'case1', ownerId: 'user1', topic: 'Postoperative bleeding' });
+
+    expect(cached).toEqual(cachedLookup);
+  });
+
+  it('getCachedReferenceLookup throws NotFoundError when the case belongs to a different user', async () => {
+    caseRepository.getById.mockResolvedValue(baseCaseState({ ownerId: 'someone-else' }));
+
+    await expect(
+      caseService.getCachedReferenceLookup({ caseId: 'case1', ownerId: 'user1', topic: 'Postoperative bleeding' })
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it('cacheReferenceLookup persists the new lookup alongside any existing ones', async () => {
+    await caseService.cacheReferenceLookup({
+      caseId: 'case1',
+      existingLookups: { 'Other topic': { query: 'q', results: [], cachedAt: 'x' } },
+      topic: 'Postoperative bleeding',
+      query: 'postoperative bleeding[tiab]',
+      results: [{ pmid: '111' }],
+    });
+
+    expect(caseRepository.update).toHaveBeenCalledWith('case1', {
+      referenceLookups: expect.objectContaining({
+        'Other topic': { query: 'q', results: [], cachedAt: 'x' },
+        'Postoperative bleeding': expect.objectContaining({
+          query: 'postoperative bleeding[tiab]',
+          results: [{ pmid: '111' }],
+        }),
+      }),
+    });
+  });
+});
+
+describe('listCases', () => {
+  it('maps each case to a list row with a derived title', async () => {
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const updatedAt = new Date('2026-01-02T00:00:00.000Z');
+    caseRepository.listForOwner.mockResolvedValue([
+      baseCaseState({
+        objectId: 'case1',
+        originalNarrative: 'A 68-year-old man underwent CABG x3 and later became hypotensive with increasing chest tube output.',
+        status: CaseStatus.COMPLETED,
+        createdAt,
+        updatedAt,
+      }),
+    ]);
+
+    const result = await caseService.listCases({ ownerId: 'user1' });
+
+    expect(caseRepository.listForOwner).toHaveBeenCalledWith('user1');
+    expect(result).toEqual([
+      {
+        caseId: 'case1',
+        title: 'A 68-year-old man underwent CABG x3 and later became hypoten…',
+        status: CaseStatus.COMPLETED,
+        createdAt,
+        updatedAt,
+      },
+    ]);
+  });
+
+  it('returns an empty array when the caller owns no cases', async () => {
+    caseRepository.listForOwner.mockResolvedValue([]);
+
+    expect(await caseService.listCases({ ownerId: 'user1' })).toEqual([]);
   });
 });
 

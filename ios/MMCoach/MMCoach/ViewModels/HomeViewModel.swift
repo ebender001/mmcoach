@@ -9,7 +9,13 @@ import SwiftUI
 
 @MainActor
 final class HomeViewModel: ObservableObject {
-    @Published private(set) var recentCases: [RecentCaseRecord] = []
+    @Published private(set) var recentCases: [RecentCaseSummary] = []
+    @Published private(set) var isLoadingRecentCases = false
+    /// Set only when a refresh fails *and* leaves no list to show -- a
+    /// background refresh failing while a previously-loaded list is still
+    /// on screen just keeps showing that stale list rather than alarming
+    /// the trainee over a transient network blip (see HomeView).
+    @Published private(set) var recentCasesErrorMessage: String?
     /// Bound directly to the paywall sheet's `isPresented` (see HomeView) --
     /// not `private(set)`, since dismissing the sheet (swipe-down) must be
     /// able to set this back to `false` too.
@@ -21,26 +27,48 @@ final class HomeViewModel: ObservableObject {
     /// once the dismissal has actually finished -- see HomeView.
     private var didUnlockCaseAccessViaPaywall = false
 
-    private let store: RecentCasesStore
+    private let hiddenCaseIds: HiddenCaseIdsStore
     private let subscriptionService: SubscriptionService
 
-    init(store: RecentCasesStore? = nil, subscriptionService: SubscriptionService? = nil) {
-        self.store = store ?? RecentCasesStore()
+    init(hiddenCaseIds: HiddenCaseIdsStore? = nil, subscriptionService: SubscriptionService? = nil) {
+        self.hiddenCaseIds = hiddenCaseIds ?? HiddenCaseIdsStore()
         self.subscriptionService = subscriptionService ?? StoreKitSubscriptionService.shared
     }
 
-    /// Reloads the local case index. Call from `.onAppear`/`.task` so the
-    /// list reflects cases created or progressed on other screens.
-    func refresh() {
-        recentCases = store.loadAll()
+    /// Seeds a fixed list for previews only -- production code always
+    /// populates `recentCases` via `refresh()`, since the backend is the
+    /// single source of truth for which cases exist.
+    #if DEBUG
+    convenience init(previewRecentCases: [RecentCaseSummary], subscriptionService: SubscriptionService? = nil) {
+        self.init(subscriptionService: subscriptionService)
+        recentCases = previewRecentCases
+    }
+    #endif
+
+    /// Reloads the case list from the backend. Call from `.onAppear`/`.task`
+    /// so the list reflects cases created or progressed on other screens.
+    func refresh() async {
+        isLoadingRecentCases = true
+        defer { isLoadingRecentCases = false }
+
+        do {
+            let hidden = hiddenCaseIds.all()
+            recentCases = try await BackendService.listCases().filter { !hidden.contains($0.id) }
+            recentCasesErrorMessage = nil
+        } catch {
+            if recentCases.isEmpty {
+                recentCasesErrorMessage = (error as? LocalizedError)?.errorDescription ?? "Couldn't load your cases. Please try again."
+            }
+        }
     }
 
-    /// Removes cases at the given offsets from the local index (e.g. via
-    /// swipe-to-delete/EditButton). Only forgets them locally -- the
-    /// underlying case still exists on the backend.
+    /// Hides cases at the given offsets from this device's Recent Cases
+    /// list (e.g. via swipe-to-delete/EditButton). Only a local, per-device
+    /// preference -- the underlying case still exists on the backend, and
+    /// still counts toward things like free-case eligibility.
     func deleteRecentCases(at offsets: IndexSet) {
         for index in offsets {
-            store.remove(id: recentCases[index].id)
+            hiddenCaseIds.hide(id: recentCases[index].id)
         }
         recentCases.remove(atOffsets: offsets)
     }

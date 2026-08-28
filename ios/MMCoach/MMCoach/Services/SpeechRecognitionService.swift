@@ -33,8 +33,23 @@
 //  transcript or what already reached Apple's servers changes. It's how
 //  detection quality gets validated against real speech before redaction
 //  (a later step) becomes load-bearing, and the file-based request pattern
-//  here is the same one step 6 (server-based transcription of the redacted
-//  file) will reuse later.
+//  here is the same one step 4 reuses.
+//
+//  Step 3 (AudioRedactionService) + step 4 of that plan: once the
+//  on-device scan above finishes, its findings/segments feed
+//  AudioRedactionService to mute the flagged spans in the recording, and
+//  the REDACTED file (not the original) is uploaded to the server-based
+//  recognizer -- the same contextualStrings-boosted path the primary
+//  live request uses -- purely to see what the real, jargon-accurate
+//  transcript looks like once PHI-bearing audio never reaches Apple.
+//  This is `redactAndReTranscribe` below. Still not wired into
+//  `sessionTranscript` or the primary flow: everything here runs as an
+//  independent side pass after the primary task has already finished and
+//  its own (unredacted) transcript has already been delivered normally.
+//  See docs/phi-hardening-plan.md's phased build order -- swapping the
+//  primary flow over to this pipeline (and splicing placeholders into the
+//  redacted transcript, so a muted span isn't just silently missing) are
+//  the steps still ahead.
 //
 
 import Foundation
@@ -91,6 +106,10 @@ final class SpeechRecognitionService: ObservableObject {
     /// active after the session has already ended (finalizeRecordingFile()),
     /// never during live recording.
     private var onDeviceRecognitionTask: SFSpeechRecognitionTask?
+    /// Step 4's re-transcribe (of the redacted file) task -- see
+    /// `redactAndReTranscribe`. Retained the same way as the other
+    /// recognition tasks, so ARC doesn't cancel it mid-flight.
+    private var reTranscribeTask: SFSpeechRecognitionTask?
     /// Local capture of the current session's raw audio -- see the type
     /// header comment. `nil` whenever no session is recording, or if the
     /// file couldn't be opened (capture failure never blocks dictation
@@ -329,13 +348,83 @@ final class SpeechRecognitionService: ObservableObject {
             #if DEBUG
             print("[SpeechRecognitionService] on-device scan callback: error=\(String(describing: taskError)) isFinal=\(result?.isFinal ?? false) text=\(result?.bestTranscription.formattedString ?? "nil")")
             #endif
-            if let result, taskError == nil {
-                Task { @MainActor in
-                    self?.logPHIScan(transcript: result.bestTranscription.formattedString)
-                }
-            }
-            if taskError != nil || result?.isFinal == true {
+            guard taskError == nil, let result, result.isFinal else {
                 try? FileManager.default.removeItem(at: fileURL)
+                return
+            }
+            let transcript = result.bestTranscription.formattedString
+            let segments = result.bestTranscription.segments
+            Task { @MainActor in
+                self?.logPHIScan(transcript: transcript)
+                // Step 3/4: fileURL's cleanup is now this call's
+                // responsibility (it needs the still-intact original to
+                // read from before redacting) -- not deleted here.
+                self?.redactAndReTranscribe(sourceURL: fileURL, transcript: transcript, segments: segments)
+            }
+        }
+    }
+
+    /// Steps 3-4: computes redaction spans from the on-device transcript's
+    /// PHI findings, mutes the audio, then uploads the REDACTED file to
+    /// the server-based recognizer to see what the real, jargon-accurate
+    /// transcript looks like once PHI-bearing audio never reaches Apple.
+    /// Still detect-only -- see type header. Deletes `sourceURL` once
+    /// redacted (or once redaction fails), and the redacted file once the
+    /// re-transcribe task finishes (success or error).
+    private func redactAndReTranscribe(sourceURL: URL, transcript: String, segments: [SFTranscriptionSegment]) {
+        let located = PHIFilterService.shared.find(in: transcript)
+        let ranges = located.compactMap { Range($0.range, in: transcript) }
+        // SFTranscriptionSegment.substringRange is an NSRange (UTF-16
+        // indexed), not a Range<String.Index> -- convert against the same
+        // transcript it came from. Segments that fail to convert (should
+        // not happen in practice, since they're both derived from the
+        // same string) are skipped rather than crashing.
+        let recognizedSegments = segments.compactMap { segment -> RecognizedSegment? in
+            guard let range = Range(segment.substringRange, in: transcript) else { return nil }
+            return RecognizedSegment(range: range, timestamp: segment.timestamp, duration: segment.duration)
+        }
+        let audioDuration = recognizedSegments.map(\.end).max() ?? .infinity
+        let spans = AudioRedactionService.redactionSpans(for: ranges, segments: recognizedSegments, audioDuration: audioDuration)
+
+        #if DEBUG
+        print("[SpeechRecognitionService] step 4: \(located.count) finding(s) -> \(spans.count) redaction span(s): \(spans)")
+        #endif
+
+        let redactedURL = sourceURL.deletingPathExtension().appendingPathExtension("redacted.caf")
+        do {
+            try AudioRedactionService.redactAudio(sourceURL: sourceURL, destinationURL: redactedURL, spans: spans)
+        } catch {
+            #if DEBUG
+            print("[SpeechRecognitionService] step 4: redactAudio failed: \(error)")
+            #endif
+            try? FileManager.default.removeItem(at: sourceURL)
+            return
+        }
+        try? FileManager.default.removeItem(at: sourceURL) // superseded by the redacted copy
+
+        guard let recognizer, recognizer.isAvailable else {
+            #if DEBUG
+            print("[SpeechRecognitionService] step 4: server-based recognizer unavailable, skipping re-transcribe")
+            #endif
+            try? FileManager.default.removeItem(at: redactedURL)
+            return
+        }
+
+        let reTranscribeRequest = SFSpeechURLRecognitionRequest(url: redactedURL)
+        reTranscribeRequest.taskHint = .dictation
+        reTranscribeRequest.shouldReportPartialResults = false
+        // Same boosting the primary live request uses -- see header comment.
+        reTranscribeRequest.contextualStrings = medicalDictionary.contextualStringSeed
+
+        reTranscribeTask = recognizer.recognitionTask(with: reTranscribeRequest) { result, taskError in
+            #if DEBUG
+            print("[SpeechRecognitionService] step 4 re-transcribe callback: error=\(String(describing: taskError)) isFinal=\(result?.isFinal ?? false) text=\(result?.bestTranscription.formattedString ?? "nil")")
+            if taskError == nil, let result, result.isFinal {
+                print("[SpeechRecognitionService] step 4: FINAL re-transcribed text (from redacted audio, contextualStrings-boosted) = \"\(result.bestTranscription.formattedString)\"")
+            }
+            #endif
+            if taskError != nil || result?.isFinal == true {
+                try? FileManager.default.removeItem(at: redactedURL)
             }
         }
     }

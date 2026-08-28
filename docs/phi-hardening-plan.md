@@ -102,8 +102,22 @@ Detection quality gets validated *before* anything touches audio:
    PHI-bearing audio never reaching Apple's servers. Still not wired into
    `sessionTranscript` -- this whole pipeline runs as an independent side
    pass alongside the untouched primary flow.
-5. **Splice + re-screen** -- placeholder insertion, then wire the existing
-   text-based redaction back in as the safety net.
+5. **Splice + re-screen** ✅ (standalone-validated; awaiting a real-device
+   pass) -- `AudioRedactionService.splicePlaceholders` inserts a
+   category-labeled placeholder into the re-transcribed text at each
+   redaction span's position, by time-aligning against the re-transcribed
+   result's own segments (valid because `redactAudio` mutes samples in
+   place, so the redacted file shares the original's exact timeline --
+   no fuzzy text matching between the two different transcripts needed).
+   `redactionSpans` is now generic over a tag (PHI category), so a merged
+   span remembers every category it covered; `PHIFinding.Category.combinedPlaceholder`
+   renders "[name removed]" or "[name and date removed]" accordingly. The
+   existing text-based `PHIFilterService.redact(_:)` then re-screens the
+   spliced result as a defense-in-depth pass. A standalone test caught a
+   real spacing bug before it touched real audio -- a redacted span before
+   the transcript's first word produced a stray leading space and no
+   separator; fixed by building explicit trimmed pieces joined by one
+   space rather than hand-placing spaces around substring concatenation.
 6. **Retire the old streaming-only path** once the new pipeline is validated
    end-to-end.
 7. **Tests** -- unit tests for the finding-to-segment mapping and the

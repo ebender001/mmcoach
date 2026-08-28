@@ -69,12 +69,13 @@ final class SpeechRecognitionService: ObservableObject {
     @Published private(set) var error: ServiceError?
 
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-    /// A single `SFSpeechRecognizer` instance running two concurrent
-    /// `recognitionTask`s (the primary server-based one plus the step-2
-    /// on-device scan) turned out to be unreliable in practice -- the
-    /// second task consistently errored with "No speech detected" even
-    /// though real audio was flowing to it. A second, independent
-    /// recognizer instance for the scan pass fixed it.
+    /// A separate `SFSpeechRecognizer` instance for the step-2 on-device
+    /// scan, isolated from the primary server-based task's recognizer.
+    /// (Sharing one instance for both tasks was tried first, on the theory
+    /// that one recognizer running two concurrent tasks was the cause of
+    /// an early "No speech detected" error on the scan task -- that alone
+    /// didn't fix it; see `scanRequest`'s config in startDictation() for
+    /// what's being tried next.)
     private let onDeviceRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private let audioEngine = AVAudioEngine()
     private let medicalDictionary: MedicalDictionaryService
@@ -158,7 +159,16 @@ final class SpeechRecognitionService: ObservableObject {
         #endif
         if let onDeviceRecognizer, onDeviceRecognizer.supportsOnDeviceRecognition, onDeviceRecognizer.isAvailable {
             let scanRequest = SFSpeechAudioBufferRecognitionRequest()
-            scanRequest.shouldReportPartialResults = false
+            // Matching the main `request`'s config below: `.unspecified`
+            // taskHint and shouldReportPartialResults = false were the
+            // original (wrong) guess and produced an immediate "No speech
+            // detected" error, before enough audio could have accumulated
+            // to judge that. `.dictation` selects less aggressive
+            // silence/VAD heuristics; partial results are still ignored by
+            // the callback below (it only acts once `isFinal`), so this
+            // costs nothing.
+            scanRequest.taskHint = .dictation
+            scanRequest.shouldReportPartialResults = true
             scanRequest.requiresOnDeviceRecognition = true
             onDeviceRequest = scanRequest
             onDeviceRecognitionRequest = scanRequest

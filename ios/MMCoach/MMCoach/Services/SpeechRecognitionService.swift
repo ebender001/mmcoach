@@ -373,26 +373,29 @@ final class SpeechRecognitionService: ObservableObject {
     /// re-transcribe task finishes (success or error).
     private func redactAndReTranscribe(sourceURL: URL, transcript: String, segments: [SFTranscriptionSegment]) {
         let located = PHIFilterService.shared.find(in: transcript)
-        let ranges = located.compactMap { Range($0.range, in: transcript) }
         // SFTranscriptionSegment.substringRange is an NSRange (UTF-16
         // indexed), not a Range<String.Index> -- convert against the same
-        // transcript it came from. Segments that fail to convert (should
-        // not happen in practice, since they're both derived from the
-        // same string) are skipped rather than crashing.
+        // transcript it came from. Ranges/segments that fail to convert
+        // (should not happen in practice, since they're both derived from
+        // the same string) are skipped rather than crashing.
+        let taggedRanges: [(range: Range<String.Index>, tag: PHIFinding.Category)] = located.compactMap {
+            guard let range = Range($0.range, in: transcript) else { return nil }
+            return (range, $0.category)
+        }
         let recognizedSegments = segments.compactMap { segment -> RecognizedSegment? in
             guard let range = Range(segment.substringRange, in: transcript) else { return nil }
             return RecognizedSegment(range: range, timestamp: segment.timestamp, duration: segment.duration)
         }
         let audioDuration = recognizedSegments.map(\.end).max() ?? .infinity
-        let spans = AudioRedactionService.redactionSpans(for: ranges, segments: recognizedSegments, audioDuration: audioDuration)
+        let spans = AudioRedactionService.redactionSpans(for: taggedRanges, segments: recognizedSegments, audioDuration: audioDuration)
 
         #if DEBUG
-        print("[SpeechRecognitionService] step 4: \(located.count) finding(s) -> \(spans.count) redaction span(s): \(spans)")
+        print("[SpeechRecognitionService] step 4: \(located.count) finding(s) -> \(spans.count) redaction span(s): \(spans.map(\.span))")
         #endif
 
         let redactedURL = sourceURL.deletingPathExtension().appendingPathExtension("redacted.caf")
         do {
-            try AudioRedactionService.redactAudio(sourceURL: sourceURL, destinationURL: redactedURL, spans: spans)
+            try AudioRedactionService.redactAudio(sourceURL: sourceURL, destinationURL: redactedURL, spans: spans.map(\.span))
         } catch {
             #if DEBUG
             print("[SpeechRecognitionService] step 4: redactAudio failed: \(error)")
@@ -419,14 +422,51 @@ final class SpeechRecognitionService: ObservableObject {
         reTranscribeTask = recognizer.recognitionTask(with: reTranscribeRequest) { result, taskError in
             #if DEBUG
             print("[SpeechRecognitionService] step 4 re-transcribe callback: error=\(String(describing: taskError)) isFinal=\(result?.isFinal ?? false) text=\(result?.bestTranscription.formattedString ?? "nil")")
-            if taskError == nil, let result, result.isFinal {
-                print("[SpeechRecognitionService] step 4: FINAL re-transcribed text (from redacted audio, contextualStrings-boosted) = \"\(result.bestTranscription.formattedString)\"")
-            }
             #endif
+            if taskError == nil, let result, result.isFinal {
+                Self.spliceAndReScreen(reTranscribedResult: result, spans: spans)
+            }
             if taskError != nil || result?.isFinal == true {
                 try? FileManager.default.removeItem(at: redactedURL)
             }
         }
+    }
+
+    /// Step 5: inserts a category-labeled placeholder into the
+    /// re-transcribed text at each redaction span's position (safe to
+    /// align by time against spans computed from the ORIGINAL audio's
+    /// timing -- `redactAudio` mutes samples in place, so the redacted
+    /// file has the same length/timeline as the source). Then re-runs the
+    /// existing text-based `PHIFilterService` on the spliced result as a
+    /// defense-in-depth pass -- catches anything the on-device scan
+    /// missed (e.g. a name garbled badly enough that it no longer reads as
+    /// one), same as `DictationController.finalizeDictation()` already
+    /// does for the primary (unredacted-audio) transcript today. Still not
+    /// wired to anything user-facing -- logged only, see type header.
+    private static func spliceAndReScreen(reTranscribedResult: SFSpeechRecognitionResult, spans: [AudioRedactionService.TaggedRedactionSpan<PHIFinding.Category>]) {
+        let reTranscript = reTranscribedResult.bestTranscription.formattedString
+        let reSegments = reTranscribedResult.bestTranscription.segments.compactMap { segment -> RecognizedSegment? in
+            guard let range = Range(segment.substringRange, in: reTranscript) else { return nil }
+            return RecognizedSegment(range: range, timestamp: segment.timestamp, duration: segment.duration)
+        }
+
+        let spliced = AudioRedactionService.splicePlaceholders(
+            into: reTranscript,
+            segments: reSegments,
+            spans: spans,
+            placeholder: PHIFinding.Category.combinedPlaceholder
+        )
+
+        let reScreenResult = PHIFilterService.shared.redact(spliced)
+        let final = reScreenResult.hasFindings ? reScreenResult.redactedText : spliced
+
+        #if DEBUG
+        print("[SpeechRecognitionService] step 5: spliced transcript = \"\(spliced)\"")
+        if reScreenResult.hasFindings {
+            print("[SpeechRecognitionService] step 5: re-screen caught \(reScreenResult.findings.count) more finding(s) the on-device scan missed")
+        }
+        print("[SpeechRecognitionService] step 5: FINAL text (what would ship) = \"\(final)\"")
+        #endif
     }
 
     private static let recordingFilePrefix = "mmcoach-dictation-"

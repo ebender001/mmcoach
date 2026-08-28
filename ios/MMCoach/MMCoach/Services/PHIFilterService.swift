@@ -51,6 +51,29 @@ struct PHIFinding: Equatable {
             case .date: return "[date removed]"
             }
         }
+
+        /// A single combined placeholder for one or more categories
+        /// redacted together -- e.g. two findings close enough that their
+        /// padded audio spans merged into one (see
+        /// AudioRedactionService.TaggedRedactionSpan): "[name removed]"
+        /// for one category, "[name and date removed]" for two, "[name,
+        /// date, and institution removed]" for three, in that fixed
+        /// `allCases` order regardless of which was found first --
+        /// matching PHIFilterResult.noticeMessage's phrasing/joining
+        /// style (kept separate from it since that message never repeats
+        /// the actual redacted text, while a placeholder stands in for it
+        /// inline).
+        static func combinedPlaceholder(for categories: Set<Category>) -> String {
+            let nouns = Category.allCases.filter { categories.contains($0) }.map(\.rawValue)
+            guard !nouns.isEmpty else { return "[removed]" }
+            let joined: String
+            switch nouns.count {
+            case 1: joined = nouns[0]
+            case 2: joined = "\(nouns[0]) and \(nouns[1])"
+            default: joined = nouns.dropLast().joined(separator: ", ") + ", and " + nouns[nouns.count - 1]
+            }
+            return "[\(joined) removed]"
+        }
     }
 
     let category: Category

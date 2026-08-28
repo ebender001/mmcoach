@@ -69,6 +69,13 @@ final class SpeechRecognitionService: ObservableObject {
     @Published private(set) var error: ServiceError?
 
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    /// A single `SFSpeechRecognizer` instance running two concurrent
+    /// `recognitionTask`s (the primary server-based one plus the step-2
+    /// on-device scan) turned out to be unreliable in practice -- the
+    /// second task consistently errored with "No speech detected" even
+    /// though real audio was flowing to it. A second, independent
+    /// recognizer instance for the scan pass fixed it.
+    private let onDeviceRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private let audioEngine = AVAudioEngine()
     private let medicalDictionary: MedicalDictionaryService
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -142,12 +149,14 @@ final class SpeechRecognitionService: ObservableObject {
 
         // Step 2's detect-only side channel -- see type header. `nil` (and
         // simply not fed audio below) if this device/locale can't do
-        // on-device recognition at all.
+        // on-device recognition at all. Uses `onDeviceRecognizer`, a
+        // separate SFSpeechRecognizer instance from `recognizer` -- see
+        // that property's comment for why sharing one didn't work.
         let onDeviceRequest: SFSpeechAudioBufferRecognitionRequest?
         #if DEBUG
-        print("[SpeechRecognitionService] supportsOnDeviceRecognition = \(recognizer.supportsOnDeviceRecognition)")
+        print("[SpeechRecognitionService] supportsOnDeviceRecognition = \(onDeviceRecognizer?.supportsOnDeviceRecognition ?? false), isAvailable = \(onDeviceRecognizer?.isAvailable ?? false)")
         #endif
-        if recognizer.supportsOnDeviceRecognition {
+        if let onDeviceRecognizer, onDeviceRecognizer.supportsOnDeviceRecognition, onDeviceRecognizer.isAvailable {
             let scanRequest = SFSpeechAudioBufferRecognitionRequest()
             scanRequest.shouldReportPartialResults = false
             scanRequest.requiresOnDeviceRecognition = true
@@ -204,7 +213,7 @@ final class SpeechRecognitionService: ObservableObject {
             #if DEBUG
             print("[SpeechRecognitionService] on-device scan task starting")
             #endif
-            onDeviceRecognitionTask = recognizer.recognitionTask(with: onDeviceRequest) { [weak self] result, taskError in
+            onDeviceRecognitionTask = onDeviceRecognizer?.recognitionTask(with: onDeviceRequest) { [weak self] result, taskError in
                 #if DEBUG
                 print("[SpeechRecognitionService] on-device scan callback: error=\(String(describing: taskError)) isFinal=\(result?.isFinal ?? false) text=\(result?.bestTranscription.formattedString ?? "nil")")
                 #endif

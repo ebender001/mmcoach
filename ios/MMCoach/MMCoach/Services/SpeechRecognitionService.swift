@@ -144,6 +144,9 @@ final class SpeechRecognitionService: ObservableObject {
         // simply not fed audio below) if this device/locale can't do
         // on-device recognition at all.
         let onDeviceRequest: SFSpeechAudioBufferRecognitionRequest?
+        #if DEBUG
+        print("[SpeechRecognitionService] supportsOnDeviceRecognition = \(recognizer.supportsOnDeviceRecognition)")
+        #endif
         if recognizer.supportsOnDeviceRecognition {
             let scanRequest = SFSpeechAudioBufferRecognitionRequest()
             scanRequest.shouldReportPartialResults = false
@@ -198,12 +201,22 @@ final class SpeechRecognitionService: ObservableObject {
         }
 
         if let onDeviceRequest {
+            #if DEBUG
+            print("[SpeechRecognitionService] on-device scan task starting")
+            #endif
             onDeviceRecognitionTask = recognizer.recognitionTask(with: onDeviceRequest) { [weak self] result, taskError in
+                #if DEBUG
+                print("[SpeechRecognitionService] on-device scan callback: error=\(String(describing: taskError)) isFinal=\(result?.isFinal ?? false) text=\(result?.bestTranscription.formattedString ?? "nil")")
+                #endif
                 guard taskError == nil, let result, result.isFinal else { return }
                 Task { @MainActor in
                     self?.logPHIScan(transcript: result.bestTranscription.formattedString)
                 }
             }
+        } else {
+            #if DEBUG
+            print("[SpeechRecognitionService] on-device scan skipped -- not supported on this device/locale")
+            #endif
         }
     }
 

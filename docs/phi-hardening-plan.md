@@ -19,10 +19,21 @@ confirmed not to contain a flagged name/date ever leaves the device.
    live request), reusing the existing `AVAudioEngine` tap in
    `SpeechRecognitionService`.
 2. **Scan (on-device)** -- run `SFSpeechRecognizer` with
-   `requiresOnDeviceRecognition = true` against that same audio, live, in
-   parallel with recording. Produces a rough transcript plus per-word
-   timestamps (`SFTranscriptionSegment.timestamp`/`.duration`). Never touches
-   the network.
+   `requiresOnDeviceRecognition = true` against that same audio, over the
+   recorded file, **sequentially after the primary (server-based) task has
+   already finished** -- not live/concurrently with it. Confirmed
+   empirically: this device can't run two `SFSpeechRecognitionTask`s
+   against live microphone audio at the same time (every attempt at
+   running the scan live in parallel with the primary task failed
+   instantly with "No speech detected", regardless of recognizer instance,
+   request config, or whether the two tasks shared the same
+   `AVAudioPCMBuffer` objects; the identical on-device request succeeded
+   immediately once nothing else was actively consuming live audio at the
+   same time). Uses `SFSpeechURLRecognitionRequest` against the file step 1
+   already wrote, not a second live buffer-fed request -- see step 6, which
+   reuses the same file-based pattern. Produces a rough transcript plus
+   per-word timestamps (`SFTranscriptionSegment.timestamp`/`.duration`).
+   Never touches the network.
 3. **Detect** -- run the existing `PHIFilterService` (NLTagger +
    NSDataDetector) over the on-device transcript, producing findings
    (name/institution/date) with character ranges.
@@ -62,12 +73,15 @@ confirmed not to contain a flagged name/date ever leaves the device.
 
 Detection quality gets validated *before* anything touches audio:
 
-1. **Capture only** -- add file-based recording in parallel with the existing
-   live stream, no behavior change yet. Confirms the plumbing works.
-2. **Detect only** -- run the on-device pass + `PHIFilterService` over test
-   recordings, log what *would* be redacted, don't mute anything yet. This is
-   where detection quality gets validated against real speech before it's
-   load-bearing.
+1. **Capture only** ✅ -- add file-based recording in parallel with the
+   existing live stream, no behavior change yet. Confirms the plumbing
+   works.
+2. **Detect only** ✅ -- run the on-device pass + `PHIFilterService` over
+   test recordings, log what *would* be redacted, don't mute anything yet.
+   Validated against real speech (correctly caught a name and a date in a
+   test phrase, even with unrelated medical-jargon garbling nearby) --
+   runs as a sequential pass after the primary task finishes, not live in
+   parallel with it (see step 2 above for why).
 3. **Redact** -- implement the muting/padding logic once step 2's detection
    looks trustworthy. Unit-testable in isolation with synthetic timestamps/
    buffers, no mic needed.

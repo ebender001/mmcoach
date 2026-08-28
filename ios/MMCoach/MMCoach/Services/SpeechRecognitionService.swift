@@ -189,7 +189,15 @@ final class SpeechRecognitionService: ObservableObject {
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             request.append(buffer)
-            onDeviceRequest?.append(buffer)
+            // `AVAudioPCMBuffer` is a reference type -- handing the exact
+            // same instance to a second, independent SFSpeechAudioBufferRecognitionRequest
+            // is suspected of leaving it looking empty to that second
+            // request (the on-device scan consistently saw "no speech"
+            // even with real audio flowing). Give it an isolated copy
+            // instead of the shared object.
+            if let onDeviceRequest, let bufferCopy = Self.copyPCMBuffer(buffer) {
+                onDeviceRequest.append(bufferCopy)
+            }
             try? self?.recordingFile?.write(from: buffer)
         }
 
@@ -354,6 +362,31 @@ final class SpeechRecognitionService: ObservableObject {
             try? FileManager.default.removeItem(at: url)
         }
         recordingFileURL = nil
+    }
+
+    /// A deep copy of a PCM buffer's sample data (not just a reference) --
+    /// see the tap closure in startDictation() for why this exists. Covers
+    /// the three common PCM sample formats; returns nil for anything else
+    /// (the on-device scan simply doesn't receive that buffer, same
+    /// fail-soft behavior as elsewhere in this file).
+    private static func copyPCMBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameCapacity) else {
+            return nil
+        }
+        copy.frameLength = buffer.frameLength
+        let frameLength = Int(buffer.frameLength)
+        let channelCount = Int(buffer.format.channelCount)
+
+        if let src = buffer.floatChannelData, let dst = copy.floatChannelData {
+            for channel in 0..<channelCount { dst[channel].update(from: src[channel], count: frameLength) }
+        } else if let src = buffer.int16ChannelData, let dst = copy.int16ChannelData {
+            for channel in 0..<channelCount { dst[channel].update(from: src[channel], count: frameLength) }
+        } else if let src = buffer.int32ChannelData, let dst = copy.int32ChannelData {
+            for channel in 0..<channelCount { dst[channel].update(from: src[channel], count: frameLength) }
+        } else {
+            return nil
+        }
+        return copy
     }
 
     private static let recordingFilePrefix = "mmcoach-dictation-"

@@ -154,16 +154,17 @@ Detection quality gets validated *before* anything touches audio:
   (confirms step 8's defense-in-depth actually catches it).
 - A date phrase spoken unusually (e.g. "postoperative day three" -- should
   *not* fire, it's relative, not absolute).
-- **Splice position accuracy across recognizers** (found during step 5's
-  real-device validation): the on-device pass and the server re-transcribe
-  pass are two independent recognizers processing the identical audio
-  file, so their own word-boundary timestamp estimates can disagree by a
-  meaningful margin even though the underlying acoustic events happen at
-  the same real times. Observed once: a placeholder landed before
-  "Patient" instead of after it, because the server pass's own segment for
-  "Patient" ended up timed slightly later than the redaction span's start
-  (computed from the on-device pass's timing). Not a correctness or
-  privacy bug -- nothing leaked, nothing crashed, the redacted content was
-  still fully removed and correctly labeled -- but worth a tolerance
-  margin in `splicePlaceholders`'s insertion-point search once there's
-  more real-phrase data to tune against.
+- **Splice position accuracy across recognizers** ✅ fixed -- turned out to
+  recur in every real test with a redaction, not a rare edge case, so it
+  got fixed rather than left as a tolerance-margin item. Root cause: the
+  word immediately preceding a redacted gap routinely has its reported
+  duration inflated by the recognizer to cover the trailing silence,
+  pushing its `end` time past where the gap actually starts. The original
+  insertion-point search picked the last segment *ending* before the gap,
+  so it would skip that word and land the placeholder one word early
+  (e.g. "...vein [institution and date removed] grafting" instead of
+  "...vein grafting [institution and date removed]"). Fixed by searching
+  on each segment's *start* time instead, which isn't subject to that
+  bias. Validated with direct synthetic reproductions of the real
+  observed failures (deliberately inflated end times matching what was
+  seen on real hardware) before it ever touched a real recording again.

@@ -35,39 +35,54 @@ struct DictationEditorView: View {
         .frame(maxHeight: .infinity)
     }
 
+    /// `TextEditor` inside nested `.frame(maxHeight: .infinity)` VStacks is
+    /// known to sometimes ignore that as a true ceiling and report its own
+    /// content-driven ideal height instead -- for a long dictation, that
+    /// grows the whole screen's layout rather than scrolling internally,
+    /// pushing the mic control (and on some screens the submit/continue
+    /// button) off the bottom, invisible. `GeometryReader` sidesteps this:
+    /// `proxy.size` is the FINAL, already-resolved size after the
+    /// surrounding VStack chain has settled, so handing that to
+    /// `TextEditor` as an explicit `height:` (not a `maxHeight` hint)
+    /// reliably forces it to respect that ceiling and scroll its own
+    /// content beyond it, which is what "long text still scrolls inside
+    /// the editor" actually requires -- not just intends.
     private var editor: some View {
-        TextEditor(text: $text)
-            .focused($isFocused)
-            .font(.body)
-            .scrollContentBackground(.hidden)
-            .padding(12)
-            .frame(minHeight: minHeight, maxHeight: .infinity)
-            .disabled(phase != .idle)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Color.michiganBlue.opacity(isFocused ? 0.35 : 0.08), lineWidth: isFocused ? 1.5 : 1)
-            )
-            .overlay(alignment: .topLeading) {
-                if text.isEmpty, phase == .idle {
-                    Text(placeholder)
-                        .font(.body)
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 20)
-                        .allowsHitTesting(false)
+        GeometryReader { proxy in
+            TextEditor(text: $text)
+                .focused($isFocused)
+                .font(.body)
+                .scrollContentBackground(.hidden)
+                .padding(12)
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .disabled(phase != .idle)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.michiganBlue.opacity(isFocused ? 0.35 : 0.08), lineWidth: isFocused ? 1.5 : 1)
+                )
+                .overlay(alignment: .topLeading) {
+                    if text.isEmpty, phase == .idle {
+                        Text(placeholder)
+                            .font(.body)
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 20)
+                            .allowsHitTesting(false)
+                    }
                 }
+                .overlay { editorOverlay }
+                .animation(.easeInOut(duration: 0.2), value: phase)
+                .animation(.easeInOut(duration: 0.15), value: isFocused)
+        }
+        .frame(minHeight: minHeight, maxHeight: .infinity)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { isFocused = false }
+                    .foregroundStyle(Color.michiganBlueText)
             }
-            .overlay { editorOverlay }
-            .animation(.easeInOut(duration: 0.2), value: phase)
-            .animation(.easeInOut(duration: 0.15), value: isFocused)
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { isFocused = false }
-                        .foregroundStyle(Color.michiganBlueText)
-                }
-            }
+        }
     }
 
     @ViewBuilder

@@ -115,9 +115,16 @@ enum AudioRedactionService {
     /// timing because `redactAudio` mutes samples in place rather than
     /// cutting them out, so a redacted file has the exact same length/
     /// timeline as the source. A span's insertion point is right after the
-    /// last segment ending at or before its start (or the very start of
-    /// the transcript, if none) -- there should be no segments actually
-    /// overlapping a redacted span, since that audio is now silence.
+    /// segment with the latest START time before the span begins (or the
+    /// very start of the transcript, if none) -- NOT the latest END time;
+    /// confirmed on real hardware that the word immediately preceding a
+    /// gap of silence routinely has its reported duration inflated to
+    /// cover that trailing silence, pushing its `end` past where the gap
+    /// actually starts and causing an end-based search to skip over it
+    /// and land the placeholder one word too early. A segment's `timestamp`
+    /// (when it starts) isn't subject to that bias -- it's set by when
+    /// speech begins, not by how long the recognizer decides to attribute
+    /// to it before the next event.
     static func splicePlaceholders<Tag: Hashable>(
         into transcript: String,
         segments: [RecognizedSegment],
@@ -136,8 +143,8 @@ enum AudioRedactionService {
         var cursor = transcript.startIndex
         for taggedSpan in spans.sorted(by: { $0.span.lowerBound < $1.span.lowerBound }) {
             let insertionPoint = segments
-                .filter { $0.end <= taggedSpan.span.lowerBound }
-                .max(by: { $0.end < $1.end })?
+                .filter { $0.timestamp < taggedSpan.span.lowerBound }
+                .max(by: { $0.timestamp < $1.timestamp })?
                 .range.upperBound ?? transcript.startIndex
             guard insertionPoint >= cursor else { continue } // out-of-order/overlapping spans -- skip rather than corrupt the string
             let before = transcript[cursor..<insertionPoint].trimmingCharacters(in: .whitespaces)

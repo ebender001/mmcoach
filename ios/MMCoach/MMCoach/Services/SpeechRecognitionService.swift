@@ -16,17 +16,25 @@
 //  Each session's raw audio is also captured to a private temp file (see
 //  `recordingFile`/`finalizeRecordingFile()`) -- step 1 of the record ->
 //  redact -> send PHI-hardening pipeline in docs/phi-hardening-plan.md.
-//  Nothing reads that file yet; it's deleted the moment the session ends,
-//  purely to prove the capture plumbing before any later step depends on
-//  it. This does not change what's sent to Apple's servers.
 //
-//  Step 2 of that same plan: a second, on-device-only recognition request
-//  (`onDeviceRecognitionRequest`/`onDeviceRecognitionTask`) runs in parallel
-//  on the same audio, purely to see what PHIFilterService would flag in its
-//  transcript -- logged, never acted on. This is still detect-only: no
-//  audio is muted, nothing about the primary (server-based) transcript or
-//  what reaches Apple changes. It's how detection quality gets validated
-//  against real speech before redaction (a later step) becomes load-bearing.
+//  Step 2 of that plan: once the primary (server-based) task has finished
+//  for the session, a SEQUENTIAL on-device-only pass re-recognizes the
+//  just-recorded file (SFSpeechURLRecognitionRequest, requiresOnDeviceRecognition
+//  = true) purely to see what PHIFilterService would flag in its transcript
+//  -- logged, never acted on. This runs strictly AFTER the primary task,
+//  not concurrently with it: empirically, this device can't run two
+//  SFSpeechRecognitionTasks against live microphone audio at the same
+//  time (every attempt at running them in parallel failed instantly with
+//  "No speech detected", regardless of recognizer instance, request
+//  config, or whether the two tasks shared the same AVAudioPCMBuffer
+//  objects -- the identical on-device request succeeded immediately once
+//  nothing else was actively consuming live audio at the same time). This
+//  is still detect-only: no audio is muted, nothing about the primary
+//  transcript or what already reached Apple's servers changes. It's how
+//  detection quality gets validated against real speech before redaction
+//  (a later step) becomes load-bearing, and the file-based request pattern
+//  here is the same one step 6 (server-based transcription of the redacted
+//  file) will reuse later.
 //
 
 import Foundation
@@ -64,39 +72,24 @@ final class SpeechRecognitionService: ObservableObject {
         }
     }
 
-    /// TEMPORARY diagnostic switch: when true, the primary server-based
-    /// request/task is skipped entirely and ONLY the on-device scan runs,
-    /// to determine whether the scan's "No speech detected" failure is
-    /// caused by running two concurrent recognition tasks at all (vs.
-    /// something specific to how it's fed audio -- three targeted fixes to
-    /// the latter didn't change the failure). Dictation will NOT produce a
-    /// usable transcript in the app while this is true -- console logs are
-    /// the only thing that matters. Revert to false once this question is
-    /// answered.
-    private static let debugOnDeviceScanOnlyForDiagnostics = true
-
     @Published private(set) var isRecording = false
     @Published private(set) var sessionTranscript = ""
     @Published private(set) var error: ServiceError?
 
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     /// A separate `SFSpeechRecognizer` instance for the step-2 on-device
-    /// scan, isolated from the primary server-based task's recognizer.
-    /// (Sharing one instance for both tasks was tried first, on the theory
-    /// that one recognizer running two concurrent tasks was the cause of
-    /// an early "No speech detected" error on the scan task -- that alone
-    /// didn't fix it; see `scanRequest`'s config in startDictation() for
-    /// what's being tried next.)
+    /// scan pass, isolated from the primary task's recognizer. Not required
+    /// for correctness now that the scan runs sequentially rather than
+    /// concurrently (see type header), but kept for cleanliness -- no
+    /// reason to route an unrelated pass through the same instance.
     private let onDeviceRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private let audioEngine = AVAudioEngine()
     private let medicalDictionary: MedicalDictionaryService
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    /// Detect-only PHI scan pass -- see the type header's "Step 2" note.
-    /// `nil` whenever no session is recording, or if on-device recognition
-    /// isn't available on this device/locale (in which case the session
-    /// proceeds exactly as it does today, just without this side channel).
-    private var onDeviceRecognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    /// The step-2 on-device scan's task -- see type header. Only ever
+    /// active after the session has already ended (finalizeRecordingFile()),
+    /// never during live recording.
     private var onDeviceRecognitionTask: SFSpeechRecognitionTask?
     /// Local capture of the current session's raw audio -- see the type
     /// header comment. `nil` whenever no session is recording, or if the
@@ -159,35 +152,6 @@ final class SpeechRecognitionService: ObservableObject {
         request.contextualStrings = medicalDictionary.contextualStringSeed
         recognitionRequest = request
 
-        // Step 2's detect-only side channel -- see type header. `nil` (and
-        // simply not fed audio below) if this device/locale can't do
-        // on-device recognition at all. Uses `onDeviceRecognizer`, a
-        // separate SFSpeechRecognizer instance from `recognizer` -- see
-        // that property's comment for why sharing one didn't work.
-        let onDeviceRequest: SFSpeechAudioBufferRecognitionRequest?
-        #if DEBUG
-        print("[SpeechRecognitionService] supportsOnDeviceRecognition = \(onDeviceRecognizer?.supportsOnDeviceRecognition ?? false), isAvailable = \(onDeviceRecognizer?.isAvailable ?? false)")
-        #endif
-        if let onDeviceRecognizer, onDeviceRecognizer.supportsOnDeviceRecognition, onDeviceRecognizer.isAvailable {
-            let scanRequest = SFSpeechAudioBufferRecognitionRequest()
-            // Matching the main `request`'s config below: `.unspecified`
-            // taskHint and shouldReportPartialResults = false were the
-            // original (wrong) guess and produced an immediate "No speech
-            // detected" error, before enough audio could have accumulated
-            // to judge that. `.dictation` selects less aggressive
-            // silence/VAD heuristics; partial results are still ignored by
-            // the callback below (it only acts once `isFinal`), so this
-            // costs nothing.
-            scanRequest.taskHint = .dictation
-            scanRequest.shouldReportPartialResults = true
-            scanRequest.requiresOnDeviceRecognition = true
-            onDeviceRequest = scanRequest
-            onDeviceRecognitionRequest = scanRequest
-        } else {
-            onDeviceRequest = nil
-            onDeviceRecognitionRequest = nil
-        }
-
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
@@ -199,18 +163,7 @@ final class SpeechRecognitionService: ObservableObject {
 
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
-            if !Self.debugOnDeviceScanOnlyForDiagnostics {
-                request.append(buffer)
-            }
-            // `AVAudioPCMBuffer` is a reference type -- handing the exact
-            // same instance to a second, independent SFSpeechAudioBufferRecognitionRequest
-            // is suspected of leaving it looking empty to that second
-            // request (the on-device scan consistently saw "no speech"
-            // even with real audio flowing). Give it an isolated copy
-            // instead of the shared object.
-            if let onDeviceRequest, let bufferCopy = Self.copyPCMBuffer(buffer) {
-                onDeviceRequest.append(bufferCopy)
-            }
+            request.append(buffer)
             try? self?.recordingFile?.write(from: buffer)
         }
 
@@ -226,46 +179,24 @@ final class SpeechRecognitionService: ObservableObject {
 
         isRecording = true
 
-        if !Self.debugOnDeviceScanOnlyForDiagnostics {
-            recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, taskError in
-                Task { @MainActor in
-                    guard let self else { return }
-                    if let result {
-                        self.sessionTranscript = result.bestTranscription.formattedString
-                    }
-                    if taskError != nil {
-                        self.failDictation()
-                    } else if result?.isFinal ?? false {
-                        self.finishDictation()
-                    }
+        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, taskError in
+            Task { @MainActor in
+                guard let self else { return }
+                if let result {
+                    self.sessionTranscript = result.bestTranscription.formattedString
+                }
+                if taskError != nil {
+                    self.failDictation()
+                } else if result?.isFinal ?? false {
+                    self.finishDictation()
                 }
             }
-        }
-
-        if let onDeviceRequest {
-            #if DEBUG
-            print("[SpeechRecognitionService] on-device scan task starting")
-            #endif
-            onDeviceRecognitionTask = onDeviceRecognizer?.recognitionTask(with: onDeviceRequest) { [weak self] result, taskError in
-                #if DEBUG
-                print("[SpeechRecognitionService] on-device scan callback: error=\(String(describing: taskError)) isFinal=\(result?.isFinal ?? false) text=\(result?.bestTranscription.formattedString ?? "nil")")
-                #endif
-                guard taskError == nil, let result, result.isFinal else { return }
-                Task { @MainActor in
-                    self?.logPHIScan(transcript: result.bestTranscription.formattedString)
-                }
-            }
-        } else {
-            #if DEBUG
-            print("[SpeechRecognitionService] on-device scan skipped -- not supported on this device/locale")
-            #endif
         }
     }
 
     /// Detect-only: runs the existing text-based PHI filter over the
     /// on-device transcript and logs what it found. Never touches
-    /// `sessionTranscript`, never redacts anything, never blocks or delays
-    /// the primary (server-based) dictation flow -- see type header "Step 2".
+    /// `sessionTranscript`, never redacts anything -- see type header "Step 2".
     private func logPHIScan(transcript: String) {
         #if DEBUG
         let result = PHIFilterService.shared.redact(transcript)
@@ -291,7 +222,6 @@ final class SpeechRecognitionService: ObservableObject {
         guard isRecording else { return }
         audioEngine.stop()
         recognitionRequest?.endAudio()
-        onDeviceRecognitionRequest?.endAudio()
         teardownAudioSession()
         scheduleFinalizationFallback()
     }
@@ -319,10 +249,6 @@ final class SpeechRecognitionService: ObservableObject {
         recognitionTask?.finish()
         recognitionTask = nil
         recognitionRequest = nil
-        onDeviceRecognitionRequest?.endAudio()
-        onDeviceRecognitionTask?.finish()
-        onDeviceRecognitionTask = nil
-        onDeviceRecognitionRequest = nil
         isRecording = false
         finalizeRecordingFile()
     }
@@ -335,9 +261,6 @@ final class SpeechRecognitionService: ObservableObject {
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
-        onDeviceRecognitionTask?.cancel()
-        onDeviceRecognitionTask = nil
-        onDeviceRecognitionRequest = nil
         isRecording = false
         error = .recognitionFailed
         finalizeRecordingFile()
@@ -363,45 +286,58 @@ final class SpeechRecognitionService: ObservableObject {
         }
     }
 
-    /// Releases (closing/flushing) and deletes the session's recording
-    /// file. Nothing reads it yet, so it's removed immediately rather than
-    /// kept around -- a later pipeline step will change this once a
-    /// redaction pass actually consumes the file before it's deleted.
+    /// Closes (flushing) the session's recording file, then hands it to the
+    /// step-2 on-device scan (see `runSequentialOnDeviceScan`), which
+    /// deletes it once done. If the scan can't run at all (unsupported
+    /// device/locale), the file is deleted immediately instead -- nothing
+    /// reads it in that case, so it shouldn't linger on disk.
     private func finalizeRecordingFile() {
         recordingFile = nil
-        if let url = recordingFileURL {
-            #if DEBUG
-            let bytes = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int
-            print("[SpeechRecognitionService] captured \(bytes ?? -1) bytes of session audio (discarded -- step 1 capture-only)")
-            #endif
-            try? FileManager.default.removeItem(at: url)
-        }
+        guard let url = recordingFileURL else { return }
         recordingFileURL = nil
+
+        #if DEBUG
+        let bytes = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int
+        print("[SpeechRecognitionService] captured \(bytes ?? -1) bytes of session audio")
+        #endif
+
+        runSequentialOnDeviceScan(fileURL: url)
     }
 
-    /// A deep copy of a PCM buffer's sample data (not just a reference) --
-    /// see the tap closure in startDictation() for why this exists. Covers
-    /// the three common PCM sample formats; returns nil for anything else
-    /// (the on-device scan simply doesn't receive that buffer, same
-    /// fail-soft behavior as elsewhere in this file).
-    private static func copyPCMBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
-        guard let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameCapacity) else {
-            return nil
+    /// Step 2's on-device PHI scan, run as a sequential pass over the
+    /// just-recorded file -- always AFTER the primary task has already
+    /// finished, never concurrently with it (see type header for why).
+    /// Detect-only: logs what PHIFilterService would flag, mutes nothing,
+    /// changes nothing about what already reached Apple's servers via the
+    /// primary task. Deletes `fileURL` once the pass completes, whether it
+    /// succeeded or not -- this is still scaffolding, nothing else reads it.
+    private func runSequentialOnDeviceScan(fileURL: URL) {
+        guard let onDeviceRecognizer, onDeviceRecognizer.supportsOnDeviceRecognition, onDeviceRecognizer.isAvailable else {
+            #if DEBUG
+            print("[SpeechRecognitionService] on-device scan skipped -- not supported on this device/locale")
+            #endif
+            try? FileManager.default.removeItem(at: fileURL)
+            return
         }
-        copy.frameLength = buffer.frameLength
-        let frameLength = Int(buffer.frameLength)
-        let channelCount = Int(buffer.format.channelCount)
 
-        if let src = buffer.floatChannelData, let dst = copy.floatChannelData {
-            for channel in 0..<channelCount { dst[channel].update(from: src[channel], count: frameLength) }
-        } else if let src = buffer.int16ChannelData, let dst = copy.int16ChannelData {
-            for channel in 0..<channelCount { dst[channel].update(from: src[channel], count: frameLength) }
-        } else if let src = buffer.int32ChannelData, let dst = copy.int32ChannelData {
-            for channel in 0..<channelCount { dst[channel].update(from: src[channel], count: frameLength) }
-        } else {
-            return nil
+        let request = SFSpeechURLRecognitionRequest(url: fileURL)
+        request.requiresOnDeviceRecognition = true
+        request.taskHint = .dictation
+        request.shouldReportPartialResults = false
+
+        onDeviceRecognitionTask = onDeviceRecognizer.recognitionTask(with: request) { [weak self] result, taskError in
+            #if DEBUG
+            print("[SpeechRecognitionService] on-device scan callback: error=\(String(describing: taskError)) isFinal=\(result?.isFinal ?? false) text=\(result?.bestTranscription.formattedString ?? "nil")")
+            #endif
+            if let result, taskError == nil {
+                Task { @MainActor in
+                    self?.logPHIScan(transcript: result.bestTranscription.formattedString)
+                }
+            }
+            if taskError != nil || result?.isFinal == true {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
         }
-        return copy
     }
 
     private static let recordingFilePrefix = "mmcoach-dictation-"

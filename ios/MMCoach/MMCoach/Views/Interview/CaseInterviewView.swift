@@ -33,44 +33,59 @@ struct CaseInterviewView: View {
         .task { await viewModel.loadIfNeeded() }
     }
 
+    /// The editor needs a genuine upper bound to hand `DictationEditorView`
+    /// (which fills whatever it's given and scrolls long text internally
+    /// -- see that view's header) -- a plain `VStack` with no enclosing
+    /// `.frame(maxHeight: .infinity)` or `ScrollView` doesn't impose one:
+    /// SwiftUI will happily render content taller than the screen and let
+    /// the excess extend off the bottom, invisible, which is exactly what
+    /// a long dictated answer did. Splitting into a flexible top region
+    /// (bounded, like NewCaseView's) and a fixed bottom region (submit
+    /// button, always visible) fixes that.
     private func interviewContent(question: MMQuestion) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            QuestionCardView(question: question)
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 20) {
+                QuestionCardView(question: question)
 
-            DictationEditorView(
-                text: $viewModel.answerText,
-                phase: viewModel.dictationPhase,
-                placeholder: "Answer as you would explain it out loud…",
-                minHeight: 120,
-                onToggleDictation: { Task { await viewModel.toggleDictation() } }
-            )
-            .frame(maxHeight: .infinity)
-
-            if !viewModel.spellingSuggestions.isEmpty {
-                Text("Double-check spelling: \(viewModel.spellingSuggestions.joined(separator: ", "))")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                DictationEditorView(
+                    text: $viewModel.answerText,
+                    phase: viewModel.dictationPhase,
+                    placeholder: "Answer as you would explain it out loud…",
+                    minHeight: 120,
+                    onToggleDictation: { Task { await viewModel.toggleDictation() } }
+                )
+                .frame(maxHeight: .infinity)
             }
+            .padding()
+            .frame(maxHeight: .infinity, alignment: .top)
 
-            if let errorMessage = viewModel.errorMessage {
-                Text(errorMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-            }
-
-            Button {
-                Task { await viewModel.submitAnswer() }
-            } label: {
-                if viewModel.isSubmittingAnswer {
-                    ProgressView().tint(.white)
-                } else {
-                    Text("Submit Answer")
+            VStack(alignment: .leading, spacing: 12) {
+                if !viewModel.spellingSuggestions.isEmpty {
+                    Text("Double-check spelling: \(viewModel.spellingSuggestions.joined(separator: ", "))")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
+
+                if let errorMessage = viewModel.errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+
+                Button {
+                    Task { await viewModel.submitAnswer() }
+                } label: {
+                    if viewModel.isSubmittingAnswer {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("Submit Answer")
+                    }
+                }
+                .buttonStyle(.michiganProminent)
+                .disabled(!viewModel.canSubmitAnswer)
             }
-            .buttonStyle(.michiganProminent)
-            .disabled(!viewModel.canSubmitAnswer)
+            .padding([.horizontal, .bottom])
         }
-        .padding()
         .alert("Dictation Unavailable",
                isPresented: dictationErrorBinding,
                presenting: viewModel.dictationErrorMessage) { _ in

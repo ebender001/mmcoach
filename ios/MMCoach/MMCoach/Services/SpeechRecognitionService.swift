@@ -13,6 +13,13 @@
 //  recognition servers when the network is available; SFSpeechRecognizer
 //  falls back to on-device automatically when it isn't.
 //
+//  Each session's raw audio is also captured to a private temp file (see
+//  `recordingFile`/`finalizeRecordingFile()`) -- step 1 of the record ->
+//  redact -> send PHI-hardening pipeline in docs/phi-hardening-plan.md.
+//  Nothing reads that file yet; it's deleted the moment the session ends,
+//  purely to prove the capture plumbing before any later step depends on
+//  it. This does not change what's sent to Apple's servers.
+//
 
 import Foundation
 import Combine
@@ -58,6 +65,12 @@ final class SpeechRecognitionService: ObservableObject {
     private let medicalDictionary: MedicalDictionaryService
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    /// Local capture of the current session's raw audio -- see the type
+    /// header comment. `nil` whenever no session is recording, or if the
+    /// file couldn't be opened (capture failure never blocks dictation
+    /// itself, since nothing depends on this file yet).
+    private var recordingFile: AVAudioFile?
+    private var recordingFileURL: URL?
     /// Safety net for stopDictation(): if the recognizer never delivers a
     /// final result after endAudio() (e.g. a hung connection), this forces
     /// finalization so the UI doesn't wait forever.
@@ -120,9 +133,12 @@ final class SpeechRecognitionService: ObservableObject {
             teardownAudioSession()
             return
         }
+        openRecordingFile(format: recordingFormat)
+
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             request.append(buffer)
+            try? self?.recordingFile?.write(from: buffer)
         }
 
         audioEngine.prepare()
@@ -131,6 +147,7 @@ final class SpeechRecognitionService: ObservableObject {
         } catch {
             self.error = .audioSessionFailure
             teardownAudioSession()
+            finalizeRecordingFile()
             return
         }
 
@@ -191,6 +208,7 @@ final class SpeechRecognitionService: ObservableObject {
         recognitionTask = nil
         recognitionRequest = nil
         isRecording = false
+        finalizeRecordingFile()
     }
 
     private func failDictation() {
@@ -203,6 +221,61 @@ final class SpeechRecognitionService: ObservableObject {
         recognitionRequest = nil
         isRecording = false
         error = .recognitionFailed
+        finalizeRecordingFile()
+    }
+
+    /// Opens a fresh temp file for this session's raw audio capture (step 1
+    /// of the PHI-hardening pipeline -- see the type header). Also sweeps
+    /// any file left behind by a prior session that didn't get to clean up
+    /// after itself (e.g. a crash) -- this is raw, unredacted audio, so it
+    /// shouldn't linger on disk longer than the session that produced it.
+    /// Failing to open the file is non-fatal: dictation proceeds exactly as
+    /// before, just without a local capture, since nothing depends on it yet.
+    private func openRecordingFile(format: AVAudioFormat) {
+        Self.removeStaleRecordingFiles()
+
+        let url = Self.makeRecordingFileURL()
+        do {
+            recordingFile = try AVAudioFile(forWriting: url, settings: format.settings)
+            recordingFileURL = url
+        } catch {
+            recordingFile = nil
+            recordingFileURL = nil
+        }
+    }
+
+    /// Releases (closing/flushing) and deletes the session's recording
+    /// file. Nothing reads it yet, so it's removed immediately rather than
+    /// kept around -- a later pipeline step will change this once a
+    /// redaction pass actually consumes the file before it's deleted.
+    private func finalizeRecordingFile() {
+        recordingFile = nil
+        if let url = recordingFileURL {
+            #if DEBUG
+            let bytes = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int
+            print("[SpeechRecognitionService] captured \(bytes ?? -1) bytes of session audio (discarded -- step 1 capture-only)")
+            #endif
+            try? FileManager.default.removeItem(at: url)
+        }
+        recordingFileURL = nil
+    }
+
+    private static let recordingFilePrefix = "mmcoach-dictation-"
+
+    private static func makeRecordingFileURL() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent(recordingFilePrefix + UUID().uuidString)
+            .appendingPathExtension("caf")
+    }
+
+    private static func removeStaleRecordingFiles() {
+        let directory = FileManager.default.temporaryDirectory
+        guard let contents = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
+            return
+        }
+        for url in contents where url.lastPathComponent.hasPrefix(recordingFilePrefix) {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     private func teardownAudioSession() {

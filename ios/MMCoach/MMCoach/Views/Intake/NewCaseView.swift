@@ -64,7 +64,7 @@ struct NewCaseView: View {
             Text("Describe the case")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.primary)
-            Text("Present it as you would at M&M conference. Do not include protected health information, including patient names, hospital or institution names, or dates of service.")
+            Text("Present it as you would at M&M conference. Do not include protected health information, including patient names, hospital or institution names, dates of service, or geographic locations.")
                 .font(.subheadline)
                 .foregroundStyle(Color.slateText)
         }

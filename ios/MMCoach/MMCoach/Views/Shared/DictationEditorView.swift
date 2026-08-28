@@ -76,7 +76,7 @@ struct DictationEditorView: View {
         case .idle:
             EmptyView()
         case .listening:
-            statusOverlay(message: "Listening… don't include patient names, staff or institution names, or dates.") {
+            statusOverlay(message: "Listening… don't include patient names, staff or institution names, dates, or locations.") {
                 WaveformView()
             }
         case .finishingUp:

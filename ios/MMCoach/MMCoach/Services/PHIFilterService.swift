@@ -11,9 +11,10 @@
 //  NSDataDetector) -- see Apple's docs confirming both run fully on-device.
 //
 //  Scope is deliberately narrow, matching what was asked: patient/staff
-//  names, hospital/institution names, and procedure dates. This is NOT a
-//  full HIPAA Safe Harbor de-identification (that also covers ages >89,
-//  exact addresses, MRNs, phone numbers, etc.) -- trainees still need to
+//  names, hospital/institution names, procedure dates, and (as of the
+//  geographic-location addition below) place names. This is NOT a full
+//  HIPAA Safe Harbor de-identification (that also covers ages >89, exact
+//  street addresses, MRNs, phone numbers, etc.) -- trainees still need to
 //  follow their institution's case-presentation norms; this is a safety
 //  net that catches obvious slips, not a substitute for that judgment.
 //
@@ -35,12 +36,14 @@ struct PHIFinding: Equatable {
         case name
         case institution
         case date
+        case location
 
         var label: String {
             switch self {
             case .name: return "a patient or staff name"
             case .institution: return "a hospital or institution name"
             case .date: return "a specific date"
+            case .location: return "a geographic location"
             }
         }
 
@@ -49,6 +52,7 @@ struct PHIFinding: Equatable {
             case .name: return "[name removed]"
             case .institution: return "[institution removed]"
             case .date: return "[date removed]"
+            case .location: return "[location removed]"
             }
         }
 
@@ -101,7 +105,7 @@ struct PHIFilterResult {
         default: joinedLabels = labels.dropLast().joined(separator: ", ") + ", and " + labels[labels.count - 1]
         }
 
-        return "We removed what looked like \(joinedLabels) before sending this. Please describe cases without patient names, staff or institution names, or specific dates."
+        return "We removed what looked like \(joinedLabels) before sending this. Please describe cases without patient names, staff or institution names, specific dates, or geographic locations."
     }
 }
 
@@ -123,6 +127,18 @@ final class PHIFilterService {
         "boerhaave", "mallory", "mallory-weiss", "weiss", "curling", "cushing",
         "virchow", "charcot", "murphy", "mcburney", "rovsing", "cullen",
         "ranson", "sengstaken", "blakemore"
+    ]
+
+    /// Medical/disease terms named after a place that a generic place
+    /// detector can mistake for an actual geographic mention (e.g. "the
+    /// patient had Lyme disease" is not a location disclosure) -- never
+    /// redacted even when they look like a place name. Hand-curated and
+    /// expected to grow, same pattern as `eponymAllowlist` above.
+    private static let geographicMedicalTermAllowlist: Set<String> = [
+        "lyme", "west nile", "rocky mountain", "german", "japanese",
+        "norwegian", "marburg", "ebola", "zika", "spanish", "asian",
+        "hong kong", "legionnaires", "legionnaires'", "middle east",
+        "mediterranean"
     ]
 
     /// Backstop for hospital/clinic names NLTagger's general-purpose NER
@@ -205,13 +221,27 @@ final class PHIFilterService {
         tagger.enumerateTags(in: text.startIndex..<text.endIndex, unit: .word, scheme: .nameType, options: options) { tag, range in
             guard let tag else { return true }
             let category: PHIFinding.Category
+            let allowlist: Set<String>
             switch tag {
-            case .personalName: category = .name
-            case .organizationName: category = .institution
-            default: return true
+            case .personalName:
+                category = .name
+                allowlist = Self.eponymAllowlist
+            case .organizationName:
+                // Preserves the pre-existing behavior exactly (this guard
+                // applied to every tagged category before the location
+                // addition below split it per-category) -- not because
+                // eponyms are expected to be mistagged as organizations,
+                // just to avoid narrowing what was already exempted here.
+                category = .institution
+                allowlist = Self.eponymAllowlist
+            case .placeName:
+                category = .location
+                allowlist = Self.geographicMedicalTermAllowlist
+            default:
+                return true
             }
             let matchedWord = String(text[range])
-            guard !Self.isKnownMedicalTerm(matchedWord, in: self.medicalDictionary) else { return true }
+            guard !Self.isKnownMedicalTerm(matchedWord, allowlist: allowlist, in: self.medicalDictionary) else { return true }
             matches.append((NSRange(range, in: text), category))
             return true
         }
@@ -234,8 +264,8 @@ final class PHIFilterService {
         return nonOverlapping
     }
 
-    private static func isKnownMedicalTerm(_ word: String, in dictionary: MedicalDictionaryService) -> Bool {
-        eponymAllowlist.contains(word.lowercased()) || dictionary.contains(word)
+    private static func isKnownMedicalTerm(_ word: String, allowlist: Set<String>, in dictionary: MedicalDictionaryService) -> Bool {
+        allowlist.contains(word.lowercased()) || dictionary.contains(word)
     }
 }
 

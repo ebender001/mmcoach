@@ -116,3 +116,45 @@ describe('aiCostRepository.listForCase', () => {
     );
   });
 });
+
+describe('aiCostRepository.listAll', () => {
+  it('returns rows across every owner, oldest first', async () => {
+    await aiCostRepository.record({
+      caseId: 'caseA',
+      ownerId: 'userA',
+      operation: 'analyzeInitialNarrative',
+      model: 'gpt-4o',
+      usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+    });
+    await aiCostRepository.record({
+      caseId: 'caseB',
+      ownerId: 'userB',
+      operation: 'finalizeCase',
+      model: 'gpt-4o-mini',
+      usage: { prompt_tokens: 200, completion_tokens: 100, total_tokens: 300 },
+    });
+
+    const rows = await aiCostRepository.listAll();
+
+    expect(rows.map((row) => row.ownerId)).toEqual(expect.arrayContaining(['userA', 'userB']));
+    for (let i = 1; i < rows.length; i += 1) {
+      expect(rows[i].createdAt.getTime()).toBeGreaterThanOrEqual(rows[i - 1].createdAt.getTime());
+    }
+    expect(rows.every((row) => row.objectId)).toBe(true);
+  });
+
+  it('excludes rows created before sinceDate', async () => {
+    await aiCostRepository.record({
+      caseId: 'caseC',
+      ownerId: 'userC',
+      operation: 'finalizeCase',
+      model: 'gpt-4o',
+      usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+    });
+
+    const future = new Date(Date.now() + 60_000);
+    const rows = await aiCostRepository.listAll({ sinceDate: future });
+
+    expect(rows).toHaveLength(0);
+  });
+});

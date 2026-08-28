@@ -28,6 +28,9 @@ yarn-error.log*
 !.env.example
 backend/.parse.local
 
+# Local admin tools (personal scripts/credentials, not shared)
+admin-tools/
+
 # Xcode
 ios/**/xcuserdata/
 ios/**/*.xcuserstate

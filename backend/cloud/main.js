@@ -16,3 +16,4 @@ require('./functions/findReferences');
 require('./functions/answerFacultyQuestion');
 require('./functions/correctDictation');
 require('./functions/deleteAccount');
+require('./functions/adminExportAICosts');

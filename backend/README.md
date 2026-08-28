@@ -60,12 +60,14 @@ backend/
 │   │   ├── getCase.js                 # mmGetCase
 │   │   ├── updatePolishedNarrative.js # mmUpdatePolishedNarrative
 │   │   ├── getCaseAICost.js           # mmGetCaseAICost
-│   │   └── findReferences.js          # mmFindReferences
+│   │   ├── findReferences.js          # mmFindReferences
+│   │   └── adminExportAICosts.js      # mmAdminExportAICosts
 │   ├── services/
 │   │   ├── caseService.js             # workflow orchestration
 │   │   ├── aiService.js               # OpenAI HTTP call, retries, timeout, JSON parsing
 │   │   ├── referenceService.js        # reference-topic -> pending-reference shape
-│   │   └── pubmedService.js           # NCBI E-utilities search + MEDLINE parsing
+│   │   ├── pubmedService.js           # NCBI E-utilities search + MEDLINE parsing
+│   │   └── adminService.js            # cross-user AI-cost export (admin-only)
 │   ├── ai/
 │   │   ├── caseAnalyzer.js            # narrative -> extractedCase; answer -> updated extractedCase
 │   │   ├── questionGenerator.js       # decides the single next question, or none
@@ -134,6 +136,7 @@ This project uses the classic Back4App Cloud Code layout (`cloud/`,
    | `OPENAI_MAX_RETRIES`  | no       | `2`            | Retries on 429/5xx or transport errors. |
    | `PUBMED_API_KEY`      | no       | (none)         | NCBI E-utilities API key -- raises the rate limit from 3 to 10 requests/sec. Not required for MMCoach's usage pattern (one search per reference lookup). |
    | `PUBMED_CONTACT_EMAIL`| no       | (none)         | Sent as courtesy identification (`tool`/`email` params) per NCBI's usage guidelines. Omitted entirely if not set -- never fabricated. |
+   | `MMCOACH_ADMIN_SECRET`| yes, for `mmAdminExportAICosts` | (none) | Shared secret checked by `mmAdminExportAICosts` (see below). Not tied to any Parse.User -- generate a random string and set the same value in `admin-tools/aiCostReport/.env` (gitignored, outside this repo's tracked files). |
 
    See `.env.example` for a local-reference copy of these names (Back4App
    does not read that file; it's documentation only).
@@ -452,6 +455,43 @@ individually recorded AI call. See "AI cost tracking" above.
       "createdAt": "2026-08-19T14:02:11.000Z"
     }
   ]
+}
+```
+
+### `mmAdminExportAICosts`
+
+**Params:** `{ adminSecret: string, sinceDays?: number }`. `adminSecret`
+must match `MMCOACH_ADMIN_SECRET`; `sinceDays`, if given, limits the
+export to rows created in the last N days.
+
+**Behavior:** returns every `MMCaseAICost` row across every user (not
+scoped to a case or an owner), plus a summary total. This is the only
+Cloud Function that isn't scoped to the caller's own data -- there is no
+`{ requireUser: true }` and no ownership check, since it's meant to be
+called by the local reporting script in `admin-tools/aiCostReport/`
+(gitignored), not by the iOS client. Authorization is `adminSecret`
+alone; see `utils/validation.js#requireAdminSecret`.
+
+**Response:**
+
+```json
+{
+  "rows": [
+    {
+      "objectId": "xyz1",
+      "caseId": "abc123",
+      "ownerId": "user1",
+      "operation": "analyzeInitialNarrative",
+      "model": "gpt-4o",
+      "promptTokens": 620,
+      "completionTokens": 140,
+      "totalTokens": 760,
+      "costUSD": 0.0029,
+      "latencyMs": 842,
+      "createdAt": "2026-08-19T14:02:11.000Z"
+    }
+  ],
+  "summary": { "rowCount": 1, "totalTokens": 760, "totalCostUSD": 0.0029 }
 }
 ```
 

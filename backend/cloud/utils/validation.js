@@ -41,4 +41,27 @@ function requireAuthenticatedUser(request) {
   return userId;
 }
 
-module.exports = { requireNonEmptyString, requireMeaningfulNarrative, requireAuthenticatedUser };
+/**
+ * Gate for admin-only Cloud Functions that have no legitimate per-user
+ * scope (e.g. a cross-user cost export) -- compared against
+ * `MMCOACH_ADMIN_SECRET`, never against a Parse.User session. Fails
+ * closed if the env var isn't configured, rather than treating an unset
+ * secret as "no check needed".
+ */
+function requireAdminSecret(request) {
+  const configured = process.env.MMCOACH_ADMIN_SECRET;
+  const provided = request && request.params && request.params.adminSecret;
+  if (!configured) {
+    throw new AuthenticationError('Admin export is not configured.');
+  }
+  if (!provided || provided !== configured) {
+    throw new AuthenticationError('Invalid admin credentials.');
+  }
+}
+
+module.exports = {
+  requireNonEmptyString,
+  requireMeaningfulNarrative,
+  requireAuthenticatedUser,
+  requireAdminSecret,
+};

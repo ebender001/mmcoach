@@ -96,17 +96,30 @@ function createFakeParse() {
       this.conditions = [];
       this.order = null;
       this.limitCount = null;
+      this.skipCount = null;
     }
     equalTo(key, value) {
-      this.conditions.push({ key, value });
+      this.conditions.push({ key, value, op: 'eq' });
+      return this;
+    }
+    greaterThanOrEqualTo(key, value) {
+      this.conditions.push({ key, value, op: 'gte' });
       return this;
     }
     descending(key) {
       this.order = { key, direction: -1 };
       return this;
     }
+    ascending(key) {
+      this.order = { key, direction: 1 };
+      return this;
+    }
     limit(count) {
       this.limitCount = count;
+      return this;
+    }
+    skip(count) {
+      this.skipCount = count;
       return this;
     }
     async get(id) {
@@ -120,12 +133,17 @@ function createFakeParse() {
       let results = Array.from(store.values()).filter(
         (obj) => obj.className === this.targetClassName
       );
-      for (const { key, value } of this.conditions) {
-        results = results.filter((obj) => matchesValue(obj.get(key), value));
+      for (const { key, value, op } of this.conditions) {
+        results = results.filter((obj) =>
+          op === 'gte' ? obj.get(key) >= value : matchesValue(obj.get(key), value)
+        );
       }
       if (this.order) {
         const { key, direction } = this.order;
         results = [...results].sort((a, b) => (a[key] > b[key] ? 1 : a[key] < b[key] ? -1 : 0) * direction);
+      }
+      if (typeof this.skipCount === 'number') {
+        results = results.slice(this.skipCount);
       }
       if (typeof this.limitCount === 'number') {
         results = results.slice(0, this.limitCount);

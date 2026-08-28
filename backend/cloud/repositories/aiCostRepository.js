@@ -98,4 +98,58 @@ async function deleteAllForOwner(ownerId) {
   }
 }
 
-module.exports = { record, listForCase, deleteAllForOwner, CLASS_NAME: AI_COST_CLASS_NAME };
+/**
+ * Every AI-cost row across every user, oldest first -- admin export only
+ * (see functions/adminExportAICosts.js, services/adminService.js). Paginates
+ * past Parse's 1000-row query cap with skip/limit rather than `query.each`,
+ * since callers want a stable ascending-by-createdAt order for reporting.
+ */
+async function listAll({ sinceDate } = {}) {
+  const AICost = getAICostClass();
+  const pageSize = 1000;
+  const rows = [];
+  let skip = 0;
+
+  for (;;) {
+    const query = new Parse.Query(AICost);
+    if (sinceDate) {
+      query.greaterThanOrEqualTo('createdAt', sinceDate);
+    }
+    query.ascending('createdAt');
+    query.limit(pageSize);
+    query.skip(skip);
+    // eslint-disable-next-line no-await-in-loop
+    const page = await query.find({ useMasterKey: true });
+
+    for (const row of page) {
+      const caseObj = row.get('case');
+      const ownerObj = row.get('owner');
+      rows.push({
+        objectId: row.id,
+        caseId: caseObj ? caseObj.id : null,
+        ownerId: ownerObj ? ownerObj.id : null,
+        operation: row.get('operation'),
+        model: row.get('model'),
+        promptTokens: row.get('promptTokens') || 0,
+        completionTokens: row.get('completionTokens') || 0,
+        totalTokens: row.get('totalTokens') || 0,
+        costUSD: row.get('costUSD'),
+        latencyMs: row.get('latencyMs') || null,
+        createdAt: row.createdAt,
+      });
+    }
+
+    if (page.length < pageSize) break;
+    skip += pageSize;
+  }
+
+  return rows;
+}
+
+module.exports = {
+  record,
+  listForCase,
+  listAll,
+  deleteAllForOwner,
+  CLASS_NAME: AI_COST_CLASS_NAME,
+};

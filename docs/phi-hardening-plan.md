@@ -82,9 +82,15 @@ Detection quality gets validated *before* anything touches audio:
    test phrase, even with unrelated medical-jargon garbling nearby) --
    runs as a sequential pass after the primary task finishes, not live in
    parallel with it (see step 2 above for why).
-3. **Redact** -- implement the muting/padding logic once step 2's detection
-   looks trustworthy. Unit-testable in isolation with synthetic timestamps/
-   buffers, no mic needed.
+3. **Redact** ✅ -- `AudioRedactionService`: maps finding ranges to
+   word-level timing (padded, merged), mutes those sample ranges in the
+   recorded file. Validated with a standalone macOS driver (no mic/device
+   needed, per the plan) -- which caught a real bug in the process:
+   `AVAudioFile.read(into:)` doesn't reliably fill a buffer to its
+   requested capacity in one call, and a naive retry silently loses audio
+   rather than appending. Fixed with a chunked read loop; confirmed
+   correct (including past the chunk boundary) before this was ever run
+   against real hardware. Not yet wired into the live dictation flow.
 4. **Re-transcribe** -- swap the server-based call to upload the redacted
    file instead of streaming live audio; get the real transcript.
 5. **Splice + re-screen** -- placeholder insertion, then wire the existing

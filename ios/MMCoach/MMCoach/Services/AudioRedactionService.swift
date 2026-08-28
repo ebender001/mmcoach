@@ -42,7 +42,15 @@ enum AudioRedactionService {
     /// Default padding on each side of a redacted span, to absorb
     /// imprecise word-boundary timestamps and coarticulation bleed into a
     /// neighboring word (see docs/phi-hardening-plan.md's edge cases).
-    static let defaultPadding: TimeInterval = 0.2
+    /// Tuned down from an initial 0.2s after real-hardware testing: when
+    /// two PHI items are spoken close together, padding on both sides of
+    /// both spans can consume most of the real (non-PHI) speech between
+    /// them, leaving only a stray word fragment in the final transcript
+    /// (observed: "who lives in" between a name and a location reduced to
+    /// just "Lives"). A judgment call, not a provable fix -- 0.15s still
+    /// covers meaningful coarticulation bleed/timestamp imprecision, just
+    /// with less margin than before.
+    static let defaultPadding: TimeInterval = 0.15
 
     /// A redacted time span plus which tag(s) (e.g. PHI categories) it
     /// represents -- a merge of two nearby findings (see `redactionSpans`)

@@ -257,6 +257,16 @@ final class SpeechRecognitionService: ObservableObject {
     }
 
     private func failDictation() {
+        // SFSpeechRecognitionTask's completion handler can fire more than
+        // once under an interruption (confirmed on real hardware: toggling
+        // airplane mode mid-pipeline produced a partial result, then a
+        // "final" empty one, then a THIRD callback reporting cancellation)
+        // -- without this guard, that late callback overwrote an already-
+        // finalized session's state with an error after the pipeline had
+        // already completed (via the on-device-transcript fallback) with
+        // whatever it had. Mirrors the same guard finishDictation(text:)
+        // already has.
+        guard isRecording else { return }
         pipelineFallbackTask?.cancel()
         pipelineFallbackTask = nil
         onDeviceRecognitionTask?.cancel()
@@ -339,7 +349,21 @@ final class SpeechRecognitionService: ObservableObject {
             #if DEBUG
             print("[SpeechRecognitionService] on-device scan callback: error=\(String(describing: taskError)) isFinal=\(result?.isFinal ?? false) text=\(result?.bestTranscription.formattedString ?? "nil")")
             #endif
-            guard taskError == nil, let result, result.isFinal else {
+            // A "final" result can still be empty -- confirmed on real
+            // hardware under an interruption (airplane mode mid-pipeline
+            // produced isFinal=true with no text), which must NOT be
+            // treated as "recognized successfully, transcript happens to
+            // be empty": that let garbage flow into the redact/re-transcribe
+            // pipeline. Unlike here, an empty RE-TRANSCRIBE result later
+            // in the pipeline is legitimate (the whole utterance being
+            // redacted PHI produces a genuinely empty base transcript) --
+            // this stricter check only applies to this first, raw pass.
+            // Checked against a TRIMMED copy only -- the untrimmed string
+            // is what's actually used downstream, since segment character
+            // ranges are computed by the Speech framework against it, and
+            // trimming would silently shift every later range lookup.
+            let isEmpty = result?.bestTranscription.formattedString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true
+            guard taskError == nil, let result, result.isFinal, !isEmpty else {
                 try? FileManager.default.removeItem(at: fileURL)
                 Task { @MainActor in self?.failDictation() }
                 return

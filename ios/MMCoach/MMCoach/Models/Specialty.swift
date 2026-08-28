@@ -14,6 +14,8 @@ import Foundation
 enum Specialty: String, CaseIterable, Identifiable {
     case cardiothoracic
     case generalSurgery
+    case vascularSurgery
+    case criticalCare
 
     var id: String { rawValue }
 
@@ -21,6 +23,8 @@ enum Specialty: String, CaseIterable, Identifiable {
         switch self {
         case .cardiothoracic: return "Cardiothoracic Surgery"
         case .generalSurgery: return "General Surgery"
+        case .vascularSurgery: return "Vascular Surgery"
+        case .criticalCare: return "Critical Care"
         }
     }
 
@@ -31,6 +35,8 @@ enum Specialty: String, CaseIterable, Identifiable {
         switch self {
         case .cardiothoracic: return "CVTMedicalDictionary"
         case .generalSurgery: return "GenSurgMedicalDictionary"
+        case .vascularSurgery: return "VascularSurgeryMedicalDictionary"
+        case .criticalCare: return "CriticalCareMedicalDictionary"
         }
     }
 
@@ -60,6 +66,34 @@ enum Specialty: String, CaseIterable, Identifiable {
                 "NPO", "PRN", "BID", "TID", "NSAID", "PPI", "ABG",
                 "WBC", "RBC", "BUN", "INR", "PTT"
             ]
+        case .vascularSurgery:
+            // Same general-purpose ward/perioperative baseline as
+            // generalSurgery, plus a handful of vascular-surgery-specific
+            // acronyms that are unambiguous enough to include without
+            // evidence from a real dictation session (unlike cardiothoracic's
+            // list, which was built from confirmed dictation misses -- see
+            // generalSurgery's note above; add more here the same way as
+            // real sessions surface repeat errors).
+            return [
+                "GI", "GU", "ICU", "UTI", "URI", "COPD", "DVT", "PE", "CVA", "TIA",
+                "NPO", "PRN", "BID", "TID", "NSAID", "PPI", "ABG",
+                "WBC", "RBC", "BUN", "INR", "PTT",
+                "PAD", "CLI", "ABI", "AAA", "TAA", "TEVAR", "EVAR", "CEA", "CAS",
+                "PTA", "AVF", "AVG", "IVC", "SFA", "CFA", "PVR"
+            ]
+        case .criticalCare:
+            // Same general-purpose ward/perioperative baseline, plus
+            // unambiguous standard ICU acronyms -- see vascularSurgery's
+            // note above on why these are included without dictation-
+            // session evidence.
+            return [
+                "GI", "GU", "ICU", "UTI", "URI", "COPD", "DVT", "PE", "CVA", "TIA",
+                "NPO", "PRN", "BID", "TID", "NSAID", "PPI", "ABG",
+                "WBC", "RBC", "BUN", "INR", "PTT",
+                "ARDS", "SIRS", "MODS", "DIC", "CRRT", "CVVH", "PEEP", "FiO2",
+                "SpO2", "EtCO2", "GCS", "RASS", "VAP", "CLABSI", "CAUTI",
+                "TPN", "MAP", "CVP", "PaO2", "PaCO2"
+            ]
         }
     }
 
@@ -76,6 +110,12 @@ enum Specialty: String, CaseIterable, Identifiable {
                 "right coronary artery", "circumflex coronary artery"
             ]
         case .generalSurgery:
+            // No evidence-backed terms yet -- see commonAbbreviations note.
+            return []
+        case .vascularSurgery:
+            // No evidence-backed terms yet -- see commonAbbreviations note.
+            return []
+        case .criticalCare:
             // No evidence-backed terms yet -- see commonAbbreviations note.
             return []
         }

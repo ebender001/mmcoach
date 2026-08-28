@@ -135,3 +135,16 @@ Detection quality gets validated *before* anything touches audio:
   (confirms step 8's defense-in-depth actually catches it).
 - A date phrase spoken unusually (e.g. "postoperative day three" -- should
   *not* fire, it's relative, not absolute).
+- **Splice position accuracy across recognizers** (found during step 5's
+  real-device validation): the on-device pass and the server re-transcribe
+  pass are two independent recognizers processing the identical audio
+  file, so their own word-boundary timestamp estimates can disagree by a
+  meaningful margin even though the underlying acoustic events happen at
+  the same real times. Observed once: a placeholder landed before
+  "Patient" instead of after it, because the server pass's own segment for
+  "Patient" ended up timed slightly later than the redaction span's start
+  (computed from the on-device pass's timing). Not a correctness or
+  privacy bug -- nothing leaked, nothing crashed, the redacted content was
+  still fully removed and correctly labeled -- but worth a tolerance
+  margin in `splicePlaceholders`'s insertion-point search once there's
+  more real-phrase data to tune against.

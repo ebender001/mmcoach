@@ -20,6 +20,14 @@
 //  purely to prove the capture plumbing before any later step depends on
 //  it. This does not change what's sent to Apple's servers.
 //
+//  Step 2 of that same plan: a second, on-device-only recognition request
+//  (`onDeviceRecognitionRequest`/`onDeviceRecognitionTask`) runs in parallel
+//  on the same audio, purely to see what PHIFilterService would flag in its
+//  transcript -- logged, never acted on. This is still detect-only: no
+//  audio is muted, nothing about the primary (server-based) transcript or
+//  what reaches Apple changes. It's how detection quality gets validated
+//  against real speech before redaction (a later step) becomes load-bearing.
+//
 
 import Foundation
 import Combine
@@ -65,6 +73,12 @@ final class SpeechRecognitionService: ObservableObject {
     private let medicalDictionary: MedicalDictionaryService
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    /// Detect-only PHI scan pass -- see the type header's "Step 2" note.
+    /// `nil` whenever no session is recording, or if on-device recognition
+    /// isn't available on this device/locale (in which case the session
+    /// proceeds exactly as it does today, just without this side channel).
+    private var onDeviceRecognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var onDeviceRecognitionTask: SFSpeechRecognitionTask?
     /// Local capture of the current session's raw audio -- see the type
     /// header comment. `nil` whenever no session is recording, or if the
     /// file couldn't be opened (capture failure never blocks dictation
@@ -126,6 +140,21 @@ final class SpeechRecognitionService: ObservableObject {
         request.contextualStrings = medicalDictionary.contextualStringSeed
         recognitionRequest = request
 
+        // Step 2's detect-only side channel -- see type header. `nil` (and
+        // simply not fed audio below) if this device/locale can't do
+        // on-device recognition at all.
+        let onDeviceRequest: SFSpeechAudioBufferRecognitionRequest?
+        if recognizer.supportsOnDeviceRecognition {
+            let scanRequest = SFSpeechAudioBufferRecognitionRequest()
+            scanRequest.shouldReportPartialResults = false
+            scanRequest.requiresOnDeviceRecognition = true
+            onDeviceRequest = scanRequest
+            onDeviceRecognitionRequest = scanRequest
+        } else {
+            onDeviceRequest = nil
+            onDeviceRecognitionRequest = nil
+        }
+
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
@@ -138,6 +167,7 @@ final class SpeechRecognitionService: ObservableObject {
         inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             request.append(buffer)
+            onDeviceRequest?.append(buffer)
             try? self?.recordingFile?.write(from: buffer)
         }
 
@@ -166,6 +196,32 @@ final class SpeechRecognitionService: ObservableObject {
                 }
             }
         }
+
+        if let onDeviceRequest {
+            onDeviceRecognitionTask = recognizer.recognitionTask(with: onDeviceRequest) { [weak self] result, taskError in
+                guard taskError == nil, let result, result.isFinal else { return }
+                Task { @MainActor in
+                    self?.logPHIScan(transcript: result.bestTranscription.formattedString)
+                }
+            }
+        }
+    }
+
+    /// Detect-only: runs the existing text-based PHI filter over the
+    /// on-device transcript and logs what it found. Never touches
+    /// `sessionTranscript`, never redacts anything, never blocks or delays
+    /// the primary (server-based) dictation flow -- see type header "Step 2".
+    private func logPHIScan(transcript: String) {
+        #if DEBUG
+        let result = PHIFilterService.shared.redact(transcript)
+        if result.hasFindings {
+            let summary = result.findings.map { "\($0.category.rawValue): \"\($0.originalText)\"" }.joined(separator: ", ")
+            print("[SpeechRecognitionService] on-device PHI scan would redact \(result.findings.count) item(s): \(summary)")
+        } else {
+            print("[SpeechRecognitionService] on-device PHI scan found nothing to redact")
+        }
+        print("[SpeechRecognitionService] on-device transcript was: \"\(transcript)\"")
+        #endif
     }
 
     /// Stops capturing audio right away, but deliberately does NOT flip
@@ -180,6 +236,7 @@ final class SpeechRecognitionService: ObservableObject {
         guard isRecording else { return }
         audioEngine.stop()
         recognitionRequest?.endAudio()
+        onDeviceRecognitionRequest?.endAudio()
         teardownAudioSession()
         scheduleFinalizationFallback()
     }
@@ -207,6 +264,10 @@ final class SpeechRecognitionService: ObservableObject {
         recognitionTask?.finish()
         recognitionTask = nil
         recognitionRequest = nil
+        onDeviceRecognitionRequest?.endAudio()
+        onDeviceRecognitionTask?.finish()
+        onDeviceRecognitionTask = nil
+        onDeviceRecognitionRequest = nil
         isRecording = false
         finalizeRecordingFile()
     }
@@ -219,6 +280,9 @@ final class SpeechRecognitionService: ObservableObject {
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
+        onDeviceRecognitionTask?.cancel()
+        onDeviceRecognitionTask = nil
+        onDeviceRecognitionRequest = nil
         isRecording = false
         error = .recognitionFailed
         finalizeRecordingFile()

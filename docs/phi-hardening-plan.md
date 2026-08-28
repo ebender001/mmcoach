@@ -91,8 +91,17 @@ Detection quality gets validated *before* anything touches audio:
    rather than appending. Fixed with a chunked read loop; confirmed
    correct (including past the chunk boundary) before this was ever run
    against real hardware. Not yet wired into the live dictation flow.
-4. **Re-transcribe** -- swap the server-based call to upload the redacted
-   file instead of streaming live audio; get the real transcript.
+4. **Re-transcribe** ✅ -- `redactAndReTranscribe` in `SpeechRecognitionService`
+   uploads the redacted file (not the original) to the server-based
+   recognizer, contextualStrings still active. Validated end-to-end on real
+   hardware: the flagged name and date were cleanly absent from the final
+   transcript (no hallucinated noise for the silent gaps), and jargon that
+   the on-device pass had mangled ("sadness Bain graft") transcribed
+   correctly ("saphenous vein graft") once contextualStrings was back in
+   play -- confirming the core thesis: real medical-term accuracy with
+   PHI-bearing audio never reaching Apple's servers. Still not wired into
+   `sessionTranscript` -- this whole pipeline runs as an independent side
+   pass alongside the untouched primary flow.
 5. **Splice + re-screen** -- placeholder insertion, then wire the existing
    text-based redaction back in as the safety net.
 6. **Retire the old streaming-only path** once the new pipeline is validated

@@ -1,0 +1,94 @@
+# PHI Hardening Plan (phiBranch)
+
+Goal: dictation currently uses server-based `SFSpeechRecognizer` so
+`contextualStrings` vocabulary boosting works (see `SpeechRecognitionService.swift`
+header) -- which means raw audio, potentially containing a spoken patient/staff
+name or a date of service, can reach Apple's speech-recognition servers before
+`PHIFilterService` ever sees the resulting text. On-device-only recognition
+closes that gap but makes too many medical-terminology errors to be usable.
+
+This plan describes a **record -> redact -> send** pipeline: detect PHI
+on-device from a rough transcript, mute exactly those spans in the recorded
+audio, and only then send the (already-redacted) file to Apple's server-based
+recognizer for the real, jargon-accurate transcript. Only audio already
+confirmed not to contain a flagged name/date ever leaves the device.
+
+## Core pipeline (per dictation segment)
+
+1. **Record** -- capture mic audio to a local file (not just streamed to a
+   live request), reusing the existing `AVAudioEngine` tap in
+   `SpeechRecognitionService`.
+2. **Scan (on-device)** -- run `SFSpeechRecognizer` with
+   `requiresOnDeviceRecognition = true` against that same audio, live, in
+   parallel with recording. Produces a rough transcript plus per-word
+   timestamps (`SFTranscriptionSegment.timestamp`/`.duration`). Never touches
+   the network.
+3. **Detect** -- run the existing `PHIFilterService` (NLTagger +
+   NSDataDetector) over the on-device transcript, producing findings
+   (name/institution/date) with character ranges.
+4. **Map** -- match each finding's character range back to the
+   `SFTranscriptionSegment`(s) it came from, producing a list of
+   `[startTime, endTime]` spans in the recording, each padded by roughly
+   150-250ms on both sides (timestamps aren't exact, and coarticulation with
+   neighboring words can bleed across the edge).
+5. **Redact** -- mute those spans in the recorded audio file (zero the PCM
+   samples / splice in silence). Everything outside the flagged spans stays
+   bit-identical to the original.
+6. **Transcribe (server-based)** -- upload the *redacted* file to
+   `SFSpeechRecognizer` server-based, with `contextualStrings` set, for the
+   real, jargon-accurate transcript. This is the only network audio call in
+   the whole pipeline, and it never carries the flagged spans.
+7. **Splice** -- align the server transcript's segments to the redaction
+   spans by timestamp and insert `"[name removed]"` / `"[date removed]"`
+   placeholders at the right positions, rather than trusting the server to
+   produce something sensible for a gap of silence.
+8. **Re-screen (defense-in-depth)** -- run `PHIFilterService` again on the
+   final assembled text (same as today's behavior). Catches anything the
+   on-device pass missed (e.g. a name garbled badly enough that it no longer
+   reads as a name), and still covers hand-typed text exactly as it does now.
+9. **Correct (unchanged)** -- the existing `correctDictation` cloud call runs
+   on the redacted+placeholder text, same as today.
+
+## Components
+
+| Component | Change |
+| --- | --- |
+| `SpeechRecognitionService` | Add file-backed recording alongside the tap; add a `requiresOnDeviceRecognition = true` request path for step 2 |
+| **New:** `AudioRedactionService` (name TBD) | Owns steps 4-5: finding-to-segment mapping, padding math, muting samples in an `AVAudioFile`/`AVAudioPCMBuffer`, writing the redacted file |
+| `PHIFilterService` | No core logic changes -- reused as-is for steps 3 and 8. May add a variant that returns findings with segment indices, not just character ranges |
+| `DictationController` | New phase(s) between `finishingUp` and `correcting` for the scan/redact/re-transcribe work; UI just sees a longer "processing" window, same as today's spinner state |
+
+## Phased build order
+
+Detection quality gets validated *before* anything touches audio:
+
+1. **Capture only** -- add file-based recording in parallel with the existing
+   live stream, no behavior change yet. Confirms the plumbing works.
+2. **Detect only** -- run the on-device pass + `PHIFilterService` over test
+   recordings, log what *would* be redacted, don't mute anything yet. This is
+   where detection quality gets validated against real speech before it's
+   load-bearing.
+3. **Redact** -- implement the muting/padding logic once step 2's detection
+   looks trustworthy. Unit-testable in isolation with synthetic timestamps/
+   buffers, no mic needed.
+4. **Re-transcribe** -- swap the server-based call to upload the redacted
+   file instead of streaming live audio; get the real transcript.
+5. **Splice + re-screen** -- placeholder insertion, then wire the existing
+   text-based redaction back in as the safety net.
+6. **Retire the old streaming-only path** once the new pipeline is validated
+   end-to-end.
+7. **Tests** -- unit tests for the finding-to-segment mapping and the
+   sample-muting math (pure logic, no real audio needed); manual verification
+   passes with scripted test phrases containing fake names/dates, checking
+   both that the redacted audio is inaudible in those spans and that
+   surrounding medical terms transcribe correctly.
+
+## Known edge cases to explicitly verify in step 7
+
+- Flagged name at the very start/end of a segment (padding running off the
+  clip boundary).
+- Two flagged spans close enough together that their padding overlaps.
+- A name garbled badly enough by the on-device pass that NER misses it
+  (confirms step 8's defense-in-depth actually catches it).
+- A date phrase spoken unusually (e.g. "postoperative day three" -- should
+  *not* fire, it's relative, not absolute).

@@ -139,13 +139,23 @@ Detection quality gets validated *before* anything touches audio:
    - `DictationController`'s "recognition stopped on its own" salvage
      branch appears to now be unreachable dead code under the new design;
      left in place, not in this change's scope.
-7. **Tests** -- unit tests for the finding-to-segment mapping and the
-   sample-muting math (pure logic, no real audio needed); manual verification
-   passes with scripted test phrases containing fake names/dates, checking
-   both that the redacted audio is inaudible in those spans and that
-   surrounding medical terms transcribe correctly.
+7. **Tests** ✅ (called done as-is, with known gaps below, not exhaustively
+   closed out) -- unit tests for the finding-to-segment mapping and the
+   sample-muting math exist and pass (standalone, no device needed).
+   Higher-priority edge cases got real validation, some incidentally: two
+   spans close together correctly merging (institution+date), padding
+   correctly eating into a close gap without leaking content (the "Palo
+   Alto" case), and the re-screen defense-in-depth actually firing on
+   something the on-device pass missed (a mis-transcribed fragment,
+   "Lucy", not a real name garbled past recognition, but the same
+   catch-mechanism). Left unverified, accepted as a known gap rather than
+   pursued further: a name at the very start of a clip (padding running
+   off the t=0 boundary, not just off the text boundary), a genuinely
+   relative date phrase ("postoperative day three") correctly not firing,
+   and a real name garbled badly enough that on-device NER itself misses
+   it (only the re-screen side of that was exercised, not the miss side).
 
-## Known edge cases to explicitly verify in step 7
+## Known edge cases (step 7's list -- see status above; some closed, some accepted as open)
 
 - Flagged name at the very start/end of a segment (padding running off the
   clip boundary).

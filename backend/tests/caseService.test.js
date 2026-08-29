@@ -526,6 +526,20 @@ describe('listCases', () => {
 
     expect(await caseService.listCases({ ownerId: 'user1' })).toEqual([]);
   });
+
+  it('derives the title from the polished narrative once one exists, not the original', async () => {
+    caseRepository.listForOwner.mockResolvedValue([
+      baseCaseState({
+        originalNarrative: 'A 90-year-old man underwent CABG x3.',
+        polishedNarrative: 'An 89-year-old man underwent CABG x3 and had an uneventful recovery.',
+        status: CaseStatus.COMPLETED,
+      }),
+    ]);
+
+    const result = await caseService.listCases({ ownerId: 'user1' });
+
+    expect(result[0].title).toBe('An 89-year-old man underwent CABG x3 and had an uneventful r…');
+  });
 });
 
 describe('response formatters', () => {

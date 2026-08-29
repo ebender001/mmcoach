@@ -329,7 +329,12 @@ async function listCases({ ownerId }) {
   const cases = await caseRepository.listForOwner(ownerId);
   return cases.map((caseState) => ({
     caseId: caseState.objectId,
-    title: deriveTitle(caseState.originalNarrative),
+    // Prefer the polished narrative once one exists (set at finalize time,
+    // and kept current by mmUpdatePolishedNarrative) so a trainee's edits
+    // -- e.g. fixing a typo'd age -- show up here too. Falls back to the
+    // original narrative for a case that hasn't been finalized yet, when
+    // polishedNarrative is still null.
+    title: deriveTitle(caseState.polishedNarrative || caseState.originalNarrative),
     status: caseState.status,
     createdAt: caseState.createdAt,
     updatedAt: caseState.updatedAt,

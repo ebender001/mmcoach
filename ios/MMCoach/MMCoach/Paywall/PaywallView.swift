@@ -8,12 +8,14 @@
 //  (only for a zero-case account), restore purchases, legal footer.
 //
 
+import StoreKit
 import SwiftUI
 
 struct PaywallView: View {
     @StateObject private var viewModel: PaywallViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isPresentingOfferCodeRedemption = false
 
     /// Called exactly once, when a purchase, a restore, or the free-case
     /// action confirms the person should proceed to the new-case workflow.
@@ -41,6 +43,7 @@ struct PaywallView: View {
                         freeCaseSection
                     }
                     restoreSection
+                    offerCodeSection
                     legalFooter
                 }
                 .padding(.horizontal, 20)
@@ -49,6 +52,9 @@ struct PaywallView: View {
             }
             .background(Color.warmBackground)
             .navigationBarTitleDisplayMode(.inline)
+            .offerCodeRedemption(isPresented: $isPresentingOfferCodeRedemption) { result in
+                Task { await viewModel.offerCodeRedemptionCompleted(result) }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
@@ -237,6 +243,29 @@ struct PaywallView: View {
             }
             .font(.footnote)
         }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Offer code
+
+    private var offerCodeSection: some View {
+        HStack(spacing: 4) {
+            Text("Have an offer code?")
+                .foregroundStyle(Color.slateText)
+            Button {
+                isPresentingOfferCodeRedemption = true
+            } label: {
+                if viewModel.state == .redeemingOfferCode {
+                    ProgressView()
+                } else {
+                    Text("Redeem Code")
+                        .underline()
+                        .foregroundStyle(Color.michiganBlueText)
+                }
+            }
+            .disabled(viewModel.isBusy)
+        }
+        .font(.footnote)
         .frame(maxWidth: .infinity)
     }
 

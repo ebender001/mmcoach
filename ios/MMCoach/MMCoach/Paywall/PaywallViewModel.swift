@@ -10,6 +10,11 @@
 
 import Combine
 import Foundation
+// Only for `StoreKitError.userCancelled`, to tell a dismissed offer-code
+// sheet apart from a real failure in `offerCodeRedemptionCompleted(_:)` --
+// everything else here still goes through SubscriptionService, never
+// StoreKit directly.
+import StoreKit
 
 enum PaywallState: Equatable {
     case loadingProducts
@@ -20,6 +25,10 @@ enum PaywallState: Equatable {
     /// (see BackendService.redeemFreeCase), not an instant local flag
     /// flip, so it needs its own busy state like purchasing/restoring do.
     case redeemingFreeCase
+    /// Waiting on the entitlement to catch up after the system offer-code
+    /// redemption sheet (see PaywallView's `.offerCodeRedemption`) reports
+    /// success -- see `offerCodeRedemptionCompleted(_:)`.
+    case redeemingOfferCode
     case purchaseFailed(message: String)
     case restoreFailed(message: String)
     /// The initial product request (plus its automatic retries -- see
@@ -60,7 +69,7 @@ final class PaywallViewModel: ObservableObject {
 
     var isBusy: Bool {
         switch state {
-        case .purchasing, .restoring, .redeemingFreeCase:
+        case .purchasing, .restoring, .redeemingFreeCase, .redeemingOfferCode:
             return true
         case .loadingProducts, .ready, .purchaseFailed, .restoreFailed, .unableToLoadProducts:
             return false
@@ -140,6 +149,30 @@ final class PaywallViewModel: ObservableObject {
         }
     }
 
+    /// Called when PaywallView's `.offerCodeRedemption` sheet finishes.
+    /// `.success` here only means the system sheet itself completed --
+    /// unlike `purchase(_:)`, which gets the resulting transaction directly
+    /// from `product.purchase()`, the transaction from an offer-code
+    /// redemption arrives separately via
+    /// StoreKitSubscriptionService's `Transaction.updates` listener, so
+    /// this polls briefly for the entitlement to catch up rather than
+    /// assuming success means unlocked immediately.
+    func offerCodeRedemptionCompleted(_ result: Result<Void, Error>) async {
+        guard !isBusy else { return }
+        switch result {
+        case .success:
+            state = .redeemingOfferCode
+            await pollForEntitlementAfterOfferCodeRedemption()
+        case .failure(let error):
+            if case StoreKitError.userCancelled = error {
+                // Not an error -- leave the trainee on the paywall.
+                state = .ready
+            } else {
+                state = .purchaseFailed(message: Self.message(for: error))
+            }
+        }
+    }
+
     /// Only valid when `freeCaseEligibility == .eligible` -- the view only
     /// shows this action in that state, but guard here too since this is
     /// the actual access decision. Calls the backend to atomically
@@ -216,6 +249,29 @@ final class PaywallViewModel: ObservableObject {
     private func refreshEntitlementAndUnlock() async {
         if await subscriptionService.hasActiveEntitlement() {
             didUnlockAccess = true
+        }
+        state = .ready
+    }
+
+    /// Up to 4 checks, 1s apart, for `Transaction.updates` to catch up
+    /// after a successful offer-code redemption -- see
+    /// `offerCodeRedemptionCompleted(_:)`. If the entitlement still hasn't
+    /// shown up by the last attempt, this leaves the trainee on the ready
+    /// paywall rather than blocking indefinitely; the listener still
+    /// unlocks access on its own once the transaction does arrive.
+    private static let offerCodeEntitlementPollAttempts = 4
+    private static let offerCodeEntitlementPollDelay: Duration = .seconds(1)
+
+    private func pollForEntitlementAfterOfferCodeRedemption() async {
+        for attempt in 1...Self.offerCodeEntitlementPollAttempts {
+            if await subscriptionService.hasActiveEntitlement() {
+                didUnlockAccess = true
+                state = .ready
+                return
+            }
+            if attempt < Self.offerCodeEntitlementPollAttempts {
+                try? await Task.sleep(for: Self.offerCodeEntitlementPollDelay)
+            }
         }
         state = .ready
     }

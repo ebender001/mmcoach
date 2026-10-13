@@ -23,6 +23,9 @@ final class CaseInterviewViewModel: ObservableObject {
         }
     }
     @Published private(set) var isLoadingCase: Bool
+    /// The saved narrative the case started from; known once the case has
+    /// been fetched (e.g. when resuming from Recent Cases).
+    @Published private(set) var originalNarrative: String?
     @Published private(set) var isSubmittingAnswer = false
     @Published private(set) var isFinalizing = false
     @Published var errorMessage: String?
@@ -143,6 +146,9 @@ final class CaseInterviewViewModel: ObservableObject {
     private func apply(_ result: MMCase) {
         status = result.status
         currentQuestion = result.nextQuestion
+        if let narrative = result.originalNarrative, !narrative.isEmpty {
+            originalNarrative = narrative
+        }
     }
 
     private static func message(for error: Error) -> String {

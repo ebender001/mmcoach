@@ -12,6 +12,7 @@ import SwiftUI
 struct CaseInterviewView: View {
     @StateObject private var viewModel: CaseInterviewViewModel
     @Binding var path: [AppRoute]
+    @State private var showingNarrative = false
 
     init(viewModel: @autoclosure @escaping () -> CaseInterviewViewModel, path: Binding<[AppRoute]>) {
         _viewModel = StateObject(wrappedValue: viewModel())
@@ -31,6 +32,22 @@ struct CaseInterviewView: View {
         .navigationTitle("Preparing Your Case")
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.loadIfNeeded() }
+        .toolbar {
+            if viewModel.originalNarrative != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingNarrative = true
+                    } label: {
+                        Label("Case Narrative", systemImage: "doc.text")
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingNarrative) {
+            if let narrative = viewModel.originalNarrative {
+                NarrativeSheetView(narrative: narrative)
+            }
+        }
     }
 
     /// The editor needs a genuine upper bound to hand `DictationEditorView`
@@ -190,5 +207,30 @@ struct CaseInterviewView: View {
             ),
             path: .constant([])
         )
+    }
+}
+
+/// Read-only bottom sheet showing the narrative the case started from.
+private struct NarrativeSheetView: View {
+    let narrative: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(narrative)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .textSelection(.enabled)
+            }
+            .navigationTitle("Case Narrative")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }

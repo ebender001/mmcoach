@@ -33,6 +33,9 @@ struct MMCase: Decodable, Identifiable, Hashable {
     var status: CaseStatus
     var nextQuestion: MMQuestion?
     var polishedNarrative: String?
+    /// The narrative as typed or dictated when the case was created. Only
+    /// returned by `mmGetCase`, so nil on snapshots from create/answer.
+    var originalNarrative: String?
     var discussionPreparation: [DiscussionTopic]
     var likelyFacultyQuestions: [String]
     var references: [ReferenceItem]
@@ -51,6 +54,7 @@ struct MMCase: Decodable, Identifiable, Hashable {
         case status
         case nextQuestion
         case polishedNarrative
+        case originalNarrative
         case discussionPreparation
         case likelyFacultyQuestions
         case references
@@ -64,6 +68,7 @@ struct MMCase: Decodable, Identifiable, Hashable {
         status = try container.decode(CaseStatus.self, forKey: .status)
         nextQuestion = try container.decodeIfPresent(MMQuestion.self, forKey: .nextQuestion)
         polishedNarrative = try container.decodeIfPresent(String.self, forKey: .polishedNarrative)
+        originalNarrative = try container.decodeIfPresent(String.self, forKey: .originalNarrative)
         discussionPreparation = try container.decodeIfPresent([DiscussionTopic].self, forKey: .discussionPreparation) ?? []
         likelyFacultyQuestions = try container.decodeIfPresent([String].self, forKey: .likelyFacultyQuestions) ?? []
         references = try container.decodeIfPresent([ReferenceItem].self, forKey: .references) ?? []

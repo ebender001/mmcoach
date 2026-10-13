@@ -179,6 +179,24 @@ struct HomeView: View {
                     viewModel.paywallDidUnlockAccess()
                 }
             }
+            .sheet(isPresented: $viewModel.isPresentingAIConsent, onDismiss: {
+                // Same race-avoidance pattern as the paywall above: resume
+                // startNewCase() only after the sheet has actually finished
+                // closing, and only if "I Agree" (not "Not Now"/swipe) is
+                // what closed it.
+                if viewModel.consumeAIConsentGranted() {
+                    Task {
+                        if await viewModel.startNewCase() {
+                            path.append(.newCase)
+                        }
+                    }
+                }
+            }) {
+                AIDataConsentView(
+                    onAgree: { viewModel.recordAIConsent() },
+                    onCancel: { viewModel.isPresentingAIConsent = false }
+                )
+            }
         }
     }
 

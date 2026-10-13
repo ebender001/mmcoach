@@ -95,6 +95,12 @@ struct AccountView: View {
 
             Divider().overlay(Color.primary.opacity(0.06))
 
+            settingsRow(icon: "hand.raised", title: "Privacy & AI Data Use") {
+                openURL(LegalLinks.privacyPolicy)
+            }
+
+            Divider().overlay(Color.primary.opacity(0.06))
+
             settingsRow(icon: "rectangle.portrait.and.arrow.right", title: "Sign Out", isDestructive: true, isBusy: isSigningOut) {
                 signOut()
             }

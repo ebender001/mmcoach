@@ -26,13 +26,23 @@ final class HomeViewModel: ObservableObject {
     /// Consumed by `consumePaywallUnlock()` from the sheet's `onDismiss`,
     /// once the dismissal has actually finished -- see HomeView.
     private var didUnlockCaseAccessViaPaywall = false
+    /// Bound to the AI-data-disclosure sheet's `isPresented` (see HomeView),
+    /// same reasoning as `isPresentingPaywall` above.
+    @Published var isPresentingAIConsent = false
+    /// Mirrors `didUnlockCaseAccessViaPaywall`, but for the consent sheet --
+    /// consumed by `consumeAIConsentGranted()` from the sheet's `onDismiss`.
+    private var didGrantAIConsentJustNow = false
 
     private let hiddenCaseIds: HiddenCaseIdsStore
     private let subscriptionService: SubscriptionService
+    private let aiConsentStore: AIDataConsentStore
 
-    init(hiddenCaseIds: HiddenCaseIdsStore? = nil, subscriptionService: SubscriptionService? = nil) {
+    init(hiddenCaseIds: HiddenCaseIdsStore? = nil,
+         subscriptionService: SubscriptionService? = nil,
+         aiConsentStore: AIDataConsentStore? = nil) {
         self.hiddenCaseIds = hiddenCaseIds ?? HiddenCaseIdsStore()
         self.subscriptionService = subscriptionService ?? StoreKitSubscriptionService.shared
+        self.aiConsentStore = aiConsentStore ?? AIDataConsentStore()
     }
 
     /// Seeds a fixed list for previews only -- production code always
@@ -81,7 +91,13 @@ final class HomeViewModel: ObservableObject {
     /// button never kicks off overlapping checks or presents the sheet
     /// twice. Returns whether the caller should push `.newCase` now.
     func startNewCase() async -> Bool {
-        guard !isCheckingCaseAccess, !isPresentingPaywall else { return false }
+        guard !isCheckingCaseAccess, !isPresentingPaywall, !isPresentingAIConsent else { return false }
+
+        guard aiConsentStore.hasConsented else {
+            isPresentingAIConsent = true
+            return false
+        }
+
         isCheckingCaseAccess = true
         defer { isCheckingCaseAccess = false }
 
@@ -90,6 +106,25 @@ final class HomeViewModel: ObservableObject {
         }
         isPresentingPaywall = true
         return false
+    }
+
+    /// Called when the trainee taps "I Agree" on the AI-data-disclosure
+    /// sheet. Only records consent and flips the binding that closes the
+    /// sheet -- deliberately does NOT resume `startNewCase()` itself, for
+    /// the same race-avoidance reason as `paywallDidUnlockAccess()` above.
+    func recordAIConsent() {
+        aiConsentStore.hasConsented = true
+        didGrantAIConsentJustNow = true
+        isPresentingAIConsent = false
+    }
+
+    /// Call from the AI-consent sheet's `onDismiss`. Returns whether the
+    /// sheet closed because consent was just granted (vs. "Not Now" or a
+    /// manual swipe-to-dismiss), consuming the flag either way so it can't
+    /// fire twice.
+    func consumeAIConsentGranted() -> Bool {
+        defer { didGrantAIConsentJustNow = false }
+        return didGrantAIConsentJustNow
     }
 
     /// Called once PaywallView confirms the person unlocked access

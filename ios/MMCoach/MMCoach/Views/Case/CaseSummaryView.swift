@@ -2,8 +2,8 @@
 //  CaseSummaryView.swift
 //  MMCoach
 //
-//  The prepared case's home: one screen, four sections (Case, SBAR, Prepare,
-//  References) switched with a segmented control. These
+//  The prepared case's home: one screen, four sections (Case, Prepare,
+//  Questions, References) switched with a segmented control. These
 //  sections are NOT top-level app destinations -- they belong to this one
 //  case, so they don't use the app's primary navigation.
 //
@@ -44,8 +44,8 @@ struct CaseSummaryView: View {
 
     private enum Section: String, CaseIterable, Identifiable {
         case polishedCase = "Case"
-        case sbar = "SBAR"
         case prepare = "Prepare"
+        case questions = "Questions"
         case references = "References"
 
         var id: String { rawValue }
@@ -103,13 +103,12 @@ struct CaseSummaryView: View {
                 isSaving: viewModel.isSavingNarrative,
                 onSave: { await viewModel.updatePolishedNarrative($0) }
             )
-        case .sbar:
-            SBARView(sbar: viewModel.sbar)
         case .prepare:
-            DiscussionPrepView(topics: viewModel.discussionPreparation,
-                               questions: viewModel.likelyFacultyQuestions,
-                               caseId: viewModel.caseId,
-                               cachedAnswers: viewModel.facultyQuestionAnswers)
+            DiscussionPrepView(topics: viewModel.discussionPreparation)
+        case .questions:
+            FacultyQuestionsView(questions: viewModel.likelyFacultyQuestions,
+                                 caseId: viewModel.caseId,
+                                 cachedAnswers: viewModel.facultyQuestionAnswers)
         case .references:
             ReferencesView(references: viewModel.references,
                             caseId: viewModel.caseId,

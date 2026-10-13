@@ -1,6 +1,6 @@
 const { EDUCATOR_PERSONA } = require('./persona');
 
-const FINALIZE_CASE_PROMPT_VERSION = '1.2.0';
+const FINALIZE_CASE_PROMPT_VERSION = '1.2.1';
 
 /**
  * Builds the prompt used once information collection is complete, to
@@ -32,21 +32,13 @@ Generate:
 
 4. "referenceTopics": an array of topics where the trainee would benefit from supporting literature or guidelines, each with "topic" and "searchIntent". Do NOT fabricate citations, PubMed IDs, DOIs, authors, journals, or publication dates -- only describe what should be looked up later.
 
-5. "sbar": a brief SBAR-format summary of the case for presenting to faculty, as an object with four string fields:
-   - "situation": what happened -- the event or complication, in one to two sentences.
-   - "background": the relevant patient history, the operation, and the course leading up to the event.
-   - "assessment": the clinical findings, the contributing factors, and the analysis of what happened. Use neutral language; do not assign blame or declare that an error occurred.
-   - "recommendation": the lessons learned and what could be done differently or monitored going forward.
-   Keep each field concise (two to five sentences). Use only facts that were provided; do not fabricate details.
-
 Respond only with a JSON object of the form:
 {
   "caseFraming": "two to four sentences: the procedure or problem and its key decision points and controversies",
   "polishedNarrative": "...",
   "discussionPreparation": [ { "topic": "...", "whyItMatters": "...", "prepareToDiscuss": "..." } ],
   "likelyFacultyQuestions": [ "..." ],
-  "referenceTopics": [ { "topic": "...", "searchIntent": "..." } ],
-  "sbar": { "situation": "...", "background": "...", "assessment": "...", "recommendation": "..." }
+  "referenceTopics": [ { "topic": "...", "searchIntent": "..." } ]
 }`;
 
   const user = `Original dictated narrative:

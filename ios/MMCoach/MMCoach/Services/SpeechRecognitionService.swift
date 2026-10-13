@@ -148,7 +148,7 @@ final class SpeechRecognitionService: ObservableObject {
         let audioSession = AVAudioSession.sharedInstance()
         do {
             try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+            try await Self.setAudioSessionActive(true)
         } catch {
             self.error = .audioSessionFailure
             return
@@ -383,7 +383,16 @@ final class SpeechRecognitionService: ObservableObject {
             // ranges are computed by the Speech framework against it, and
             // trimming would silently shift every later range lookup.
             let isEmpty = result?.bestTranscription.formattedString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true
-            guard taskError == nil, let result, result.isFinal, !isEmpty else {
+            // An interim (non-final) result with no error is NOT a failure:
+            // confirmed on real hardware that the recognizer can deliver
+            // one before the real final result even with
+            // `shouldReportPartialResults = false`. Treating it as a
+            // failure deleted the audio file and ended the session before
+            // the valid final callback arrived, silently dropping the
+            // dictation. Wait for the final result (or an error); the
+            // pipeline fallback timer covers a final that never comes.
+            if taskError == nil, result?.isFinal != true { return }
+            guard taskError == nil, let result, !isEmpty else {
                 try? FileManager.default.removeItem(at: fileURL)
                 Task { @MainActor in self?.failDictation() }
                 return
@@ -548,9 +557,40 @@ final class SpeechRecognitionService: ObservableObject {
         }
     }
 
+    /// Serial so a quick stop-then-start can't reorder a deactivate after
+    /// the next activate.
+    private static let audioSessionQueue = DispatchQueue(label: "MMCoach.SpeechRecognitionService.audioSession",
+                                                         qos: .userInitiated)
+
+    /// `AVAudioSession.setActive` blocks until the system finishes
+    /// reconfiguring the audio route, and iOS logs "can lead to UI
+    /// unresponsiveness if called on the main thread" when it's called
+    /// there (this class is @MainActor). The async activate/deactivate
+    /// API that avoids this is iOS 27+, so on the supported 18.6+ range
+    /// the same synchronous call runs on a background queue instead.
+    private static func setAudioSessionActive(_ active: Bool) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            audioSessionQueue.async {
+                do {
+                    try AVAudioSession.sharedInstance().setActive(active, options: .notifyOthersOnDeactivation)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Removes the tap right away (must happen on the main actor, before
+    /// anything else touches the engine), then deactivates the session
+    /// off the main thread without making callers wait for it.
     private func teardownAudioSession() {
         audioEngine.inputNode.removeTap(onBus: 0)
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        // Enqueued directly (not via a Task) so it's guaranteed to land on
+        // the serial queue before any later activate.
+        Self.audioSessionQueue.async {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 
     private func requestAuthorization() async -> Bool {

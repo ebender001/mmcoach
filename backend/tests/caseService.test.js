@@ -211,7 +211,6 @@ describe('finalizeCase', () => {
       polishedNarrative: 'Polished narrative...',
       discussionPreparation: [{ topic: 't', whyItMatters: 'w', prepareToDiscuss: 'p' }],
       likelyFacultyQuestions: ['A question?'],
-      sbar: { situation: 's', background: 'b', assessment: 'a', recommendation: 'r' },
       references: [{ topic: 't', searchIntent: 's', citation: null, verified: false }],
       meta: { model: 'gpt-test' },
       promptVersion: '1.0.0',
@@ -222,7 +221,6 @@ describe('finalizeCase', () => {
 
     expect(result.status).toBe(CaseStatus.COMPLETED);
     expect(result.polishedNarrative).toBe('Polished narrative...');
-    expect(result.sbar).toEqual({ situation: 's', background: 'b', assessment: 'a', recommendation: 'r' });
     expect(result.references).toHaveLength(1);
   });
 });

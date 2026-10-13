@@ -83,6 +83,11 @@ function validateFinalizeCaseResponse(data) {
         }))
     : [];
 
+  // SBAR is a supplementary section: if the model omits it or returns a
+  // malformed one, finalize still succeeds with `sbar: null` rather than
+  // failing the whole case.
+  const sbar = normalizeSbar(data.sbar);
+
   if (discussionPreparation.length === 0) {
     throw new AIResponseError('Finalize response did not include any discussion preparation topics.');
   }
@@ -95,7 +100,16 @@ function validateFinalizeCaseResponse(data) {
     discussionPreparation,
     likelyFacultyQuestions,
     referenceTopics,
+    sbar,
   };
+}
+
+/** Returns a trimmed { situation, background, assessment, recommendation } or null. */
+function normalizeSbar(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const fields = ['situation', 'background', 'assessment', 'recommendation'];
+  if (!fields.every((field) => isNonEmptyString(value[field]))) return null;
+  return Object.fromEntries(fields.map((field) => [field, value[field].trim()]));
 }
 
 function validateCorrectDictationResponse(data) {

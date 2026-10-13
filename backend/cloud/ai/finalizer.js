@@ -1,6 +1,6 @@
 /**
  * Responsible for generating the polished presentation narrative,
- * discussion-preparation topics, likely faculty questions, and pending
+ * discussion-preparation topics, likely faculty questions, SBAR summary, and pending
  * reference topics once information collection is complete.
  */
 const aiService = require('../services/aiService');
@@ -24,6 +24,7 @@ async function finalizeCase({ extractedCase, conversation, originalNarrative, ca
     polishedNarrative: result.polishedNarrative,
     discussionPreparation: result.discussionPreparation,
     likelyFacultyQuestions: result.likelyFacultyQuestions,
+    sbar: result.sbar,
     references,
     meta,
     promptVersion: FINALIZE_CASE_PROMPT_VERSION,

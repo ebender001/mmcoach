@@ -35,6 +35,7 @@ function toClientJSON(parseObject) {
     conversation: parseObject.get('conversation') || [],
     currentQuestion: parseObject.get('currentQuestion') || null,
     polishedNarrative: parseObject.get('polishedNarrative') || null,
+    sbar: parseObject.get('sbar') || null,
     discussionPreparation: parseObject.get('discussionPreparation') || [],
     likelyFacultyQuestions: parseObject.get('likelyFacultyQuestions') || [],
     references: parseObject.get('references') || [],

@@ -2,8 +2,10 @@
 //  FacultyQuestionsView.swift
 //  MMCoach
 //
-//  Displays likely faculty questions as stacked cards (matching
-//  DiscussionPrepView/ReferencesView). Tapping a card opens
+//  Displays likely faculty questions as stacked cards. This is a section,
+//  not a screen: it has no scroll view of its own and is embedded below
+//  the discussion topics in DiscussionPrepView (the Prepare tab). Tapping
+//  a card opens
 //  FacultyQuestionAnswerView, which drafts a model answer for that
 //  question live so the trainee can rehearse against something concrete.
 //
@@ -18,28 +20,25 @@ struct FacultyQuestionsView: View {
     let cachedAnswers: [String: String]
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Label("Likely Faculty Questions", systemImage: "person.fill.questionmark")
-                    .font(.headline)
-                    .foregroundStyle(Color.michiganBlueText)
+        VStack(alignment: .leading, spacing: 20) {
+            Label("Likely Faculty Questions", systemImage: "person.fill.questionmark")
+                .font(.headline)
+                .foregroundStyle(Color.michiganBlueText)
 
-                if questions.isEmpty {
-                    Text("No faculty questions yet.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
-                        NavigationLink {
-                            FacultyQuestionAnswerView(question: question, caseId: caseId, cachedAnswer: cachedAnswers[question])
-                        } label: {
-                            questionCard(number: index + 1, question: question)
-                        }
-                        .buttonStyle(.plain)
+            if questions.isEmpty {
+                Text("No faculty questions yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
+                    NavigationLink {
+                        FacultyQuestionAnswerView(question: question, caseId: caseId, cachedAnswer: cachedAnswers[question])
+                    } label: {
+                        questionCard(number: index + 1, question: question)
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            .padding()
         }
     }
 
@@ -68,7 +67,8 @@ struct FacultyQuestionsView: View {
 
 #Preview {
     NavigationStack {
-        FacultyQuestionsView(
+        ScrollView {
+            FacultyQuestionsView(
             questions: [
                 "What prompted the decision to obtain imaging at that point?",
                 "At what point would you consider operative re-exploration?",
@@ -77,6 +77,8 @@ struct FacultyQuestionsView: View {
             ],
             caseId: "preview",
             cachedAnswers: [:]
-        )
+            )
+            .padding()
+        }
     }
 }

@@ -11,6 +11,7 @@ final class CaseSummaryViewModel: ObservableObject {
     let caseId: String
 
     @Published private(set) var polishedNarrative: String
+    @Published private(set) var sbar: SBARSummary?
     @Published private(set) var discussionPreparation: [DiscussionTopic]
     @Published private(set) var likelyFacultyQuestions: [String]
     @Published private(set) var references: [ReferenceItem]
@@ -34,6 +35,7 @@ final class CaseSummaryViewModel: ObservableObject {
     init(caseId: String, initialCase: MMCase?) {
         self.caseId = caseId
         self.polishedNarrative = initialCase?.polishedNarrative ?? ""
+        self.sbar = initialCase?.sbar
         self.discussionPreparation = initialCase?.discussionPreparation ?? []
         self.likelyFacultyQuestions = initialCase?.likelyFacultyQuestions ?? []
         self.references = initialCase?.references ?? []
@@ -47,6 +49,7 @@ final class CaseSummaryViewModel: ObservableObject {
         do {
             let result = try await BackendService.getCase(caseId: caseId)
             polishedNarrative = result.polishedNarrative ?? polishedNarrative
+            sbar = result.sbar
             discussionPreparation = result.discussionPreparation
             likelyFacultyQuestions = result.likelyFacultyQuestions
             references = result.references

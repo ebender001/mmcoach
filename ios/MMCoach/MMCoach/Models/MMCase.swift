@@ -36,6 +36,8 @@ struct MMCase: Decodable, Identifiable, Hashable {
     /// The narrative as typed or dictated when the case was created. Only
     /// returned by `mmGetCase`, so nil on snapshots from create/answer.
     var originalNarrative: String?
+    /// SBAR summary generated at finalize; nil on older cases.
+    var sbar: SBARSummary?
     var discussionPreparation: [DiscussionTopic]
     var likelyFacultyQuestions: [String]
     var references: [ReferenceItem]
@@ -55,6 +57,7 @@ struct MMCase: Decodable, Identifiable, Hashable {
         case nextQuestion
         case polishedNarrative
         case originalNarrative
+        case sbar
         case discussionPreparation
         case likelyFacultyQuestions
         case references
@@ -69,6 +72,7 @@ struct MMCase: Decodable, Identifiable, Hashable {
         nextQuestion = try container.decodeIfPresent(MMQuestion.self, forKey: .nextQuestion)
         polishedNarrative = try container.decodeIfPresent(String.self, forKey: .polishedNarrative)
         originalNarrative = try container.decodeIfPresent(String.self, forKey: .originalNarrative)
+        sbar = try container.decodeIfPresent(SBARSummary.self, forKey: .sbar)
         discussionPreparation = try container.decodeIfPresent([DiscussionTopic].self, forKey: .discussionPreparation) ?? []
         likelyFacultyQuestions = try container.decodeIfPresent([String].self, forKey: .likelyFacultyQuestions) ?? []
         references = try container.decodeIfPresent([ReferenceItem].self, forKey: .references) ?? []
@@ -81,6 +85,7 @@ struct MMCase: Decodable, Identifiable, Hashable {
          status: CaseStatus,
          nextQuestion: MMQuestion? = nil,
          polishedNarrative: String? = nil,
+         sbar: SBARSummary? = nil,
          discussionPreparation: [DiscussionTopic] = [],
          likelyFacultyQuestions: [String] = [],
          references: [ReferenceItem] = [],
@@ -90,6 +95,7 @@ struct MMCase: Decodable, Identifiable, Hashable {
         self.status = status
         self.nextQuestion = nextQuestion
         self.polishedNarrative = polishedNarrative
+        self.sbar = sbar
         self.discussionPreparation = discussionPreparation
         self.likelyFacultyQuestions = likelyFacultyQuestions
         self.references = references

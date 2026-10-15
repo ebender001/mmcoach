@@ -4,7 +4,7 @@
  *
  * On Back4App, set these under Server Settings > Environment Variables.
  */
-const DEFAULT_MODEL = 'gpt-4o';
+const DEFAULT_MODEL = 'gpt-6-luna';
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_MAX_RETRIES = 2;
 

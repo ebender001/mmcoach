@@ -14,6 +14,7 @@
 const PRICING_USD_PER_MILLION_TOKENS = {
   'gpt-4o': { input: 2.5, output: 10 },
   'gpt-4o-mini': { input: 0.15, output: 0.6 },
+  'gpt-6-luna': { input: 0.1, output: 0.5 },
 };
 
 /**

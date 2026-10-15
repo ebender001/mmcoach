@@ -131,7 +131,7 @@ This project uses the classic Back4App Cloud Code layout (`cloud/`,
    | Variable             | Required | Default        | Purpose |
    | --------------------- | -------- | -------------- | ------- |
    | `OPENAI_API_KEY`      | yes      | (none)         | OpenAI API key. Never committed, never sent to the client. |
-   | `OPENAI_MODEL`        | no       | `gpt-4o`  | Chat Completions model used for all AI calls. |
+   | `OPENAI_MODEL`        | no       | `gpt-6-luna`  | Chat Completions model used for all AI calls. |
    | `OPENAI_TIMEOUT_MS`   | no       | `30000`        | Per-request timeout to the AI provider. |
    | `OPENAI_MAX_RETRIES`  | no       | `2`            | Retries on 429/5xx or transport errors. |
    | `PUBMED_API_KEY`      | no       | (none)         | NCBI E-utilities API key -- raises the rate limit from 3 to 10 requests/sec. Not required for MMCoach's usage pattern (one search per reference lookup). |
@@ -446,7 +446,7 @@ individually recorded AI call. See "AI cost tracking" above.
     {
       "objectId": "xyz1",
       "operation": "analyzeInitialNarrative",
-      "model": "gpt-4o",
+      "model": "gpt-6-luna",
       "promptTokens": 620,
       "completionTokens": 140,
       "totalTokens": 760,
@@ -482,7 +482,7 @@ alone; see `utils/validation.js#requireAdminSecret`.
       "caseId": "abc123",
       "ownerId": "user1",
       "operation": "analyzeInitialNarrative",
-      "model": "gpt-4o",
+      "model": "gpt-6-luna",
       "promptTokens": 620,
       "completionTokens": 140,
       "totalTokens": 760,
